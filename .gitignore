@@ -4,3 +4,12 @@ release/
 *.exe.blockmap
 .DS_Store
 Thumbs.db
+
+# Android
+android/.gradle/
+android/app/build/
+android/local.properties
+android/xiaofeng.keystore
+android/*.apk
+*.keystore
+!android/gradle/wrapper/gradle-wrapper.jar

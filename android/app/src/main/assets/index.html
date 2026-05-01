@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>小风剧场</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-layout" id="app-layout">
+    <!-- 顶部导航栏 -->
+    <div class="mobile-navbar">
+      <span class="logo">💨 小风剧场</span>
+      <div class="mobile-search-toggle" onclick="toggleMobileSearch()">🔍</div>
+    </div>
+
+    <!-- 搜索栏（可折叠） -->
+    <div class="mobile-search-bar" id="mobile-search-bar">
+      <input type="text" id="home-search-input" placeholder="搜索剧名、演员…">
+      <button class="btn btn-search" onclick="doSearchFromHome()">搜索</button>
+    </div>
+
+    <!-- 主内容 -->
+    <main class="content">
+      <section id="page-home" class="page active">
+        <div class="hero" id="hero">
+          <div class="hero-overlay"></div>
+          <div class="hero-info">
+            <h1 class="hero-title">小风剧场</h1>
+            <p class="hero-desc">一起看剧吧 💨</p>
+            <div class="hero-actions">
+              <button class="btn btn-play" id="hero-play-btn" style="display:none">▶ 播放</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header"><h2>🔥 热门剧集</h2></div>
+          <div class="card-grid" id="trending-grid"></div>
+        </div>
+        <div class="section">
+          <div class="section-header"><h2>⭐ 高分推荐</h2></div>
+          <div class="card-grid" id="top-rated-grid"></div>
+        </div>
+      </section>
+
+      <section id="page-domestic" class="page">
+        <div class="section">
+          <div class="section-header"><h2>🇨🇳 国产剧</h2></div>
+          <div class="filter-bar" data-t="13">
+            <button class="filter-btn active" data-class="">全部</button>
+            <button class="filter-btn" data-class="古装">古装</button>
+            <button class="filter-btn" data-class="剧情">剧情</button>
+            <button class="filter-btn" data-class="悬疑">悬疑</button>
+            <button class="filter-btn" data-class="喜剧">喜剧</button>
+          </div>
+          <div class="card-grid" id="domestic-grid"></div>
+        </div>
+      </section>
+
+      <section id="page-us" class="page">
+        <div class="section">
+          <div class="section-header"><h2>🇺🇸 美剧</h2></div>
+          <div class="filter-bar" data-t="16">
+            <button class="filter-btn active" data-class="">全部</button>
+            <button class="filter-btn" data-class="科幻">科幻</button>
+            <button class="filter-btn" data-class="悬疑">悬疑</button>
+            <button class="filter-btn" data-class="喜剧">喜剧</button>
+            <button class="filter-btn" data-class="奇幻">奇幻</button>
+          </div>
+          <div class="card-grid" id="us-grid"></div>
+        </div>
+      </section>
+
+      <section id="page-international" class="page">
+        <div class="section">
+          <div class="section-header"><h2>🌍 海外剧</h2></div>
+          <div class="filter-bar" data-t="15,22,23">
+            <button class="filter-btn active" data-t="">全部</button>
+            <button class="filter-btn" data-t="22">日剧</button>
+            <button class="filter-btn" data-t="15">韩剧</button>
+            <button class="filter-btn" data-t="23">英剧</button>
+            <button class="filter-btn" data-t="">其他</button>
+          </div>
+          <div class="card-grid" id="international-grid"></div>
+        </div>
+      </section>
+
+      <section id="page-search" class="page">
+        <div class="search-bar">
+          <input type="text" id="search-input" placeholder="搜索剧名、演员、导演…">
+          <button class="btn btn-search">搜索</button>
+        </div>
+        <div class="card-grid" id="search-results"></div>
+      </section>
+    </main>
+
+    <!-- 底部导航 -->
+    <nav class="mobile-nav">
+      <div class="mobile-nav-item active" data-page="home"><span>🏠</span><span>首页</span></div>
+      <div class="mobile-nav-item" data-page="domestic"><span>🇨🇳</span><span>国产剧</span></div>
+      <div class="mobile-nav-item" data-page="us"><span>🇺🇸</span><span>美剧</span></div>
+      <div class="mobile-nav-item" data-page="international"><span>🌍</span><span>海外剧</span></div>
+      <div class="mobile-nav-item" data-page="search"><span>📋</span><span>历史</span></div>
+    </nav>
+  </div>
+
+  <script src="hls.min.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

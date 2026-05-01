@@ -1,6 +1,6 @@
-# 💨 小风剧场 · 桌面视频播放器
+# 💨 小风剧场
 
-> Electron 桌面端视频追剧工具，支持多源搜索、历史记录、进度续播 —— 小风 & 小齐 共建。
+> 多平台视频追剧工具 · 桌面版 + 安卓版 —— 小风 & 小齐 共建。
 
 ## 🎯 功能介绍
 
@@ -48,6 +48,48 @@ npm start
 - **HLS.js** — m3u8 视频解码
 - **ffzy API** — 视频数据源
 - **electron-builder** — 打包分发
+
+---
+
+## 📱 安卓版
+
+基于 Kotlin + WebView + ExoPlayer 的原生 Android 客户端，与桌面版共享同一套前端界面。
+
+### ✨ 特性
+
+| 功能 | 说明 |
+|:---|:---|
+| 🌐 WebView 前端 | 复用桌面版 HTML/CSS/JS，移动端适配 |
+| 🎬 原生播放器 | ExoPlayer 解码 HLS/m3u8 + MP4 |
+| 📱 底部导航 | 首页 / 国产剧 / 美剧 / 海外剧 / 历史 |
+| 📋 观看历史 | localStorage 持久化存储 |
+| 🔍 多源搜索 | 与桌面版相同的搜索体验 |
+
+### 📥 下载安装
+
+从 [Releases](https://github.com/fengse7/xiaofeng-theater/releases) 下载最新 `小风剧场-vx.x.x.apk`，直接安装即可。
+
+> ⚠️ 需要 Android 8.0+，安装时如提示「未知来源」请允许。
+
+### 🛠️ 从源码构建
+
+```bash
+# 1. 用 Android Studio 打开 android/ 目录
+# 2. 在 android/gradle.properties 中配置你的签名信息
+# 3. Build → Generate Signed APK，选择 release
+
+# 或命令行：
+cd android
+gradlew assembleRelease
+# APK 输出在 android/app/build/outputs/apk/release/
+```
+
+### 🏗️ 技术栈
+
+- **Kotlin** — Android 原生开发语言
+- **WebView** — 承载前端 UI
+- **ExoPlayer** — HLS/mp4 视频播放
+- **JavaScriptInterface** — WebView ↔ Native 通信
 
 ## ⚠️ 免责声明
 

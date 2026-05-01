@@ -1,0 +1,57 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.xiaofeng.theater'
+    compileSdk 34
+
+    signingConfigs {
+        release {
+            storeFile rootProject.file(KEYSTORE_FILE ?: 'xiaofeng.keystore')
+            storePassword KEYSTORE_PASSWORD
+            keyAlias KEY_ALIAS ?: 'xiaofeng'
+            keyPassword KEY_PASSWORD ?: KEYSTORE_PASSWORD
+        }
+    }
+
+    defaultConfig {
+        applicationId "com.xiaofeng.theater"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+            debuggable false
+        }
+        debug {
+            // 也可以用 release 签名打 debug 包，方便调试
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'com.google.android.exoplayer:exoplayer-ui:2.19.1'
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.webkit:webkit:1.8.0'
+    // ExoPlayer for HLS/m3u8
+    implementation 'com.google.android.exoplayer:exoplayer:2.19.1'
+    implementation 'com.google.android.exoplayer:exoplayer-hls:2.19.1'
+}
