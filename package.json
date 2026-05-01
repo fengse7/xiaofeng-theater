@@ -1,0 +1,51 @@
+{
+  "name": "xiaofeng-theater",
+  "version": "1.0.0",
+  "description": "小风剧场 - 桌面视频播放器",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "npx electron-builder --win --x64",
+    "pack": "npx electron-builder --win --x64 --dir"
+  },
+  "author": "小风 & 小齐",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^41.3.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "hls.js": "^1.6.16"
+  },
+  "build": {
+    "appId": "com.xiaofeng.theater",
+    "productName": "小风剧场",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "styles.css",
+      "index.html",
+      "lib/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}
