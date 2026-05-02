@@ -77,6 +77,23 @@
         <View android:layout_width="wrap_content" android:layout_height="1dp" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/speed_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="2.0x ⏩"
+        android:textColor="#ffffff"
+        android:textSize="22sp"
+        android:background="#cc000000"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="10dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="80dp" />
+
     <ImageView
         android:id="@+id/center_play_btn"
         android:layout_width="60dp"
@@ -160,6 +177,16 @@
             android:layout_marginStart="24dp" />
 
         <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/btn_speed"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="倍速"
+            android:textColor="#ffffff"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:paddingHorizontal="12dp" />
 
         <TextView
             android:id="@+id/btn_episodes"

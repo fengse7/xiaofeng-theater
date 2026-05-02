@@ -34,11 +34,17 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var nextEpBtn: ImageButton
     private lateinit var episodeBtn: TextView
     private lateinit var exitBtn: TextView
+    private lateinit var speedBtn: TextView
     private lateinit var centerPlayBtn: ImageView
+    private lateinit var speedIndicator: TextView
     private lateinit var seekBar: android.widget.SeekBar
     private lateinit var timeCurrent: TextView
     private lateinit var timeTotal: TextView
     private lateinit var seekbarContainer: LinearLayout
+
+    private var currentSpeed = 1.0f
+    private var longPressSpeed = false
+    private var speedBeforeLongPress = 1.0f
 
     private var exoPlayer: ExoPlayer? = null
     private var episodes: Array<String> = emptyArray()
@@ -82,7 +88,9 @@ class PlayerActivity : AppCompatActivity() {
         nextEpBtn = findViewById(R.id.btn_next_ep)
         episodeBtn = findViewById(R.id.btn_episodes)
         exitBtn = findViewById(R.id.btn_exit)
+        speedBtn = findViewById(R.id.btn_speed)
         centerPlayBtn = findViewById(R.id.center_play_btn)
+        speedIndicator = findViewById(R.id.speed_indicator)
         seekBar = findViewById(R.id.seek_bar)
         timeCurrent = findViewById(R.id.time_current)
         timeTotal = findViewById(R.id.time_total)
@@ -109,9 +117,11 @@ class PlayerActivity : AppCompatActivity() {
         playPauseBtn.setOnClickListener { togglePlayPause() }
         nextEpBtn.setOnClickListener { playNextEpisode() }
         episodeBtn.setOnClickListener { showEpisodeDialog() }
+        speedBtn.setOnClickListener { showSpeedDialog() }
 
-        // 双击暂停 + 单击显示控件
-        val gestureDetector = GestureDetector(this, SingleDoubleTapListener())
+        // 双击暂停 + 单击显示控件 + 长按倍速
+        val gestureListener = GestureListener()
+        val gestureDetector = GestureDetector(this, gestureListener)
         overlay.setOnTouchListener { _, event ->
             gestureDetector.onTouchEvent(event)
             handleGestureMotion(event)
@@ -171,8 +181,8 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ===== 双击/单击监听 =====
-    inner class SingleDoubleTapListener : GestureDetector.SimpleOnGestureListener() {
+    // ===== 手势监听（单击/双击/长按）=====
+    inner class GestureListener : GestureDetector.SimpleOnGestureListener() {
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
             toggleControls()
             return true
@@ -180,6 +190,14 @@ class PlayerActivity : AppCompatActivity() {
         override fun onDoubleTap(e: MotionEvent): Boolean {
             togglePlayPause()
             return true
+        }
+        override fun onLongPress(e: MotionEvent) {
+            if (!longPressSpeed && exoPlayer != null) {
+                longPressSpeed = true
+                speedBeforeLongPress = currentSpeed
+                exoPlayer!!.setPlaybackSpeed(2.0f)
+                showSpeedIndicator("2.0x ⏩")
+            }
         }
     }
 
@@ -212,6 +230,12 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                // 恢复长按倍速
+                if (longPressSpeed) {
+                    longPressSpeed = false
+                    exoPlayer?.setPlaybackSpeed(speedBeforeLongPress)
+                    hideSpeedIndicator()
+                }
                 if (gestureType == 3 && isSeeking) {
                     val ratio = (event.x - startX) / overlay.width
                     val seekTo = (startSeekPos + (ratio * exoPlayer?.duration!!).toLong()).coerceIn(0L, exoPlayer?.duration ?: 0L)
@@ -336,6 +360,62 @@ class PlayerActivity : AppCompatActivity() {
     private fun updateEpisodeBtn() {
         episodeBtn.text = "选集"
     }
+
+    // ===== 倍速 =====
+    private val speedOptions = arrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+
+    private fun showSpeedDialog() {
+        val dialog = Dialog(this, R.style.BottomSheetDialog)
+        val view = layoutInflater.inflate(R.layout.dialog_episodes, null)
+        val list = view.findViewById<LinearLayout>(R.id.episode_list)
+        val tvTitle = view.findViewById<TextView>(R.id.dialog_title)
+        view.findViewById<TextView>(R.id.dialog_close).setOnClickListener { dialog.dismiss() }
+        tvTitle.text = "播放速度"
+
+        speedOptions.forEach { speed ->
+            val label = if (speed == 1.0f) "${speed}x 正常" else "${speed}x"
+            val btn = TextView(this).apply {
+                text = label
+                setPadding(32, 24, 32, 24)
+                setTextColor(Color.WHITE)
+                textSize = 16f
+                setBackgroundResource(if (speed == currentSpeed) R.drawable.ep_selected_bg else R.drawable.ep_bg)
+                setOnClickListener {
+                    currentSpeed = speed
+                    exoPlayer?.setPlaybackSpeed(speed)
+                    speedBtn.text = if (speed == 1.0f) "倍速" else "${speed}x"
+                    showSpeedIndicator("${speed}x")
+                    dialog.dismiss()
+                }
+            }
+            list.addView(btn)
+        }
+
+        dialog.setContentView(view)
+        dialog.window?.apply {
+            setLayout(600.dp(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(Gravity.BOTTOM)
+            setWindowAnimations(R.style.SlideUpAnimation)
+        }
+        dialog.show()
+        resetAutoHide()
+    }
+
+    private fun showSpeedIndicator(text: String) {
+        speedIndicator.text = text
+        speedIndicator.visibility = View.VISIBLE
+        speedIndicator.alpha = 1f
+        hideHandler.removeCallbacks(indicatorHideRunnable)
+        hideHandler.postDelayed(indicatorHideRunnable, 1200)
+    }
+
+    private fun hideSpeedIndicator() {
+        speedIndicator.animate().alpha(0f).setDuration(300).withEndAction {
+            speedIndicator.visibility = View.GONE
+        }.start()
+    }
+
+    private val indicatorHideRunnable = Runnable { hideSpeedIndicator() }
 
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
