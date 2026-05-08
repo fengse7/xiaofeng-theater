@@ -3,6 +3,9 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// 修复 Windows 路径过长问题
+buildDir = "F:/缓存/xiaofeng-build/app"
+
 android {
     namespace 'com.xiaofeng.theater'
     compileSdk 34
@@ -31,8 +34,9 @@ android {
             debuggable false
         }
         debug {
-            // 也可以用 release 签名打 debug 包，方便调试
-            signingConfig signingConfigs.release
+            // debug 使用默认 debug 签名
+            signingConfig null
+            debuggable true
         }
     }
     compileOptions {
