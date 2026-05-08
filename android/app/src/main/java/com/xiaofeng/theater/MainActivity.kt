@@ -1,8 +1,12 @@
 package com.xiaofeng.theater
 
 import android.annotation.SuppressLint
+import android.app.DownloadManager
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
@@ -16,11 +20,15 @@ import java.net.URL
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private var downloadManager: DownloadManager? = null
+    private val downloadQueue = mutableMapOf<Long, Int>() // downloadId -> epIdx
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
 
         webView = findViewById(R.id.webview)
 
@@ -75,5 +83,64 @@ class MainActivity : AppCompatActivity() {
                 startActivity(intent)
             }
         }
+
+        // 下载单集
+        @JavascriptInterface
+        fun downloadVideo(url: String, title: String, epTitle: String, epIdx: Int) {
+            runOnUiThread {
+                startDownload(url, title, epTitle, epIdx)
+            }
+        }
+
+        // 下载全部
+        @JavascriptInterface
+        fun downloadAll(title: String, epTitles: String, epUrls: String) {
+            runOnUiThread {
+                val titles = epTitles.split("|||")
+                val urls = epUrls.split("|||")
+                titles.forEachIndexed { idx, epTitle ->
+                    if (idx < urls.size) {
+                        startDownload(urls[idx], title, epTitle, idx)
+                        // 每集之间稍作延迟
+                        Thread.sleep(500)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startDownload(url: String, title: String, epTitle: String, epIdx: Int) {
+        val safeTitle = sanitizeFileName(title)
+        val safeEp = sanitizeFileName(epTitle)
+        val ext = if (url.endsWith(".mp4")) ".mp4" else ".ts"
+        val filename = "${safeTitle}_${safeEp}${ext}"
+
+        val request = DownloadManager.Request(Uri.parse(url))
+            .setTitle("${title} - ${epTitle}")
+            .setDescription("小风剧场下载中...")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "小风剧场/$filename")
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(false)
+
+        try {
+            val downloadId = downloadManager?.enqueue(request)
+            if (downloadId != null) {
+                downloadQueue[downloadId] = epIdx
+                // 通知 WebView 下载已开始
+                webView.post {
+                    webView.loadUrl("javascript:onDownloadStatus(${epIdx}, 'downloading')")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("XiaoFeng", "Download failed: ${e.message}")
+            webView.post {
+                webView.loadUrl("javascript:onDownloadStatus(${epIdx}, 'error')")
+            }
+        }
+    }
+
+    private fun sanitizeFileName(name: String): String {
+        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
     }
 }

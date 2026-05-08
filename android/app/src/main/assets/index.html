@@ -2,27 +2,42 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>小风剧场</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="lib/hls.min.js"></script>
 </head>
 <body>
-  <div class="app-layout" id="app-layout">
-    <!-- 顶部导航栏 -->
-    <div class="mobile-navbar">
+  <!-- 自定义标题栏 -->
+  <div class="titlebar" id="titlebar">
+    <div class="titlebar-drag">
       <span class="logo">💨 小风剧场</span>
-      <div class="mobile-search-toggle" onclick="toggleMobileSearch()">🔍</div>
     </div>
-
-    <!-- 搜索栏（可折叠） -->
-    <div class="mobile-search-bar" id="mobile-search-bar">
-      <input type="text" id="home-search-input" placeholder="搜索剧名、演员…">
-      <button class="btn btn-search" onclick="doSearchFromHome()">搜索</button>
+    <div class="titlebar-controls">
+      <button class="ctl-btn" id="btn-minimize">─</button>
+      <button class="ctl-btn" id="btn-maximize"><span class="btn-icon btn-icon-max"></span></button>
+      <button class="ctl-btn ctl-close" id="btn-close">✕</button>
     </div>
+  </div>
 
-    <!-- 主内容 -->
+  <div class="app-layout" id="app-layout">
+    <nav class="sidebar">
+      <ul class="nav-list">
+        <li class="nav-item active" data-page="home"><span class="nav-icon">🏠</span><span class="nav-text">首页</span></li>
+        <li class="nav-item" data-page="domestic"><span class="nav-icon">🇨🇳</span><span class="nav-text">国产剧</span></li>
+        <li class="nav-item" data-page="us"><span class="nav-icon">🇺🇸</span><span class="nav-text">美剧</span></li>
+        <li class="nav-item" data-page="international"><span class="nav-icon">🌍</span><span class="nav-text">海外剧</span></li>
+        <li class="nav-item" data-page="search"><span class="nav-icon">📋</span><span class="nav-text">历史记录</span></li>
+      </ul>
+    </nav>
+
     <main class="content">
       <section id="page-home" class="page active">
+        <div class="global-search">
+          <span class="gs-icon">🔍</span>
+          <input type="text" id="home-search-input" placeholder="搜索剧名、演员…">
+          <button class="btn btn-search gs-btn" onclick="doSearchFromHome()">搜索</button>
+        </div>
         <div class="hero" id="hero">
           <div class="hero-overlay"></div>
           <div class="hero-info">
@@ -33,7 +48,6 @@
             </div>
           </div>
         </div>
-
         <div class="section">
           <div class="section-header"><h2>🔥 热门剧集</h2></div>
           <div class="card-grid" id="trending-grid"></div>
@@ -94,18 +108,117 @@
         <div class="card-grid" id="search-results"></div>
       </section>
     </main>
-
-    <!-- 底部导航 -->
-    <nav class="mobile-nav">
-      <div class="mobile-nav-item active" data-page="home"><span>🏠</span><span>首页</span></div>
-      <div class="mobile-nav-item" data-page="domestic"><span>🇨🇳</span><span>国产剧</span></div>
-      <div class="mobile-nav-item" data-page="us"><span>🇺🇸</span><span>美剧</span></div>
-      <div class="mobile-nav-item" data-page="international"><span>🌍</span><span>海外剧</span></div>
-      <div class="mobile-nav-item" data-page="search"><span>📋</span><span>历史</span></div>
-    </nav>
   </div>
 
-  <script src="hls.min.js"></script>
+  <!-- 播放页 -->
+  <div class="player-page" id="player-page" style="display:none">
+    <div class="player-header">
+      <div class="ph-left">
+        <span class="logo">💨 小风剧场</span>
+        <button class="player-back" id="player-back-btn">← 返回</button>
+        <span class="player-title" id="player-title">正在播放</span>
+      </div>
+      <div class="ph-right titlebar-controls">
+        <button class="ctl-btn" id="ph-btn-minimize">─</button>
+        <button class="ctl-btn" id="ph-btn-maximize"><span class="btn-icon btn-icon-max"></span></button>
+        <button class="ctl-btn ctl-close" id="ph-btn-close">✕</button>
+      </div>
+    </div>
+    <div class="player-main">
+      <div class="player-left">
+        <div class="video-wrapper" id="video-wrapper">
+          <video id="video-player" controls controlslist="nofullscreen nodownload noremoteplayback" autoplay></video>
+        </div>
+        <div class="video-info" id="video-info">
+          <div class="vi-title" id="vi-title"></div>
+          <div class="vi-meta" id="vi-meta"></div>
+        </div>
+      </div>
+      <div class="player-right">
+        <div class="pr-header">
+          <span>📋 选集</span>
+          <span class="pr-count" id="ep-count"></span>
+          <button class="btn btn-download-manager" id="open-download-mgr" title="下载管理">⬇️ 下载</button>
+        </div>
+        <div class="episode-grid" id="episode-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 下载管理弹窗 -->
+  <div class="modal-overlay" id="download-modal" style="display:none">
+    <div class="download-modal">
+      <div class="dm-header">
+        <span>⬇️ 下载管理</span>
+        <button class="dm-close" id="dm-close-btn">✕</button>
+      </div>
+      <div class="dm-body">
+        <div id="download-list" class="download-list"></div>
+        <div id="download-empty" class="download-empty">暂无下载任务</div>
+      </div>
+      <div class="dm-footer">
+        <button class="btn btn-open-dir" id="open-dir-btn">📂 打开下载目录</button>
+        <span class="dm-dir" id="dm-dir-path"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 选集下载按钮模板（隐藏，用于 JS 克隆） -->
+  <template id="ep-btn-template">
+    <button class="ep-btn" data-idx="0" data-url="">
+      <span class="ep-title"></span>
+      <span class="ep-download-btn" title="下载到本地">⬇️</span>
+    </button>
+  </template>
+
+  <script>
+    // 最大化图标切换（CSS 画方框）
+    function setMaxIcons(maximized) {
+      document.querySelectorAll('.btn-icon-max').forEach(el => {
+        if (maximized) {
+          el.classList.add('restore');
+          el.innerHTML = '<span class="r1"></span><span class="r2"></span>';
+        } else {
+          el.classList.remove('restore');
+          el.innerHTML = '';
+        }
+      });
+    }
+    if (window.electronAPI?.onWindowStateChange) {
+      window.electronAPI.onWindowStateChange(s => setMaxIcons(s.maximized));
+    }
+
+    // 按钮绑定
+    ['btn','ph-btn'].forEach(prefix => {
+      ['minimize','maximize','close'].forEach(action => {
+        const el = document.getElementById(prefix + '-' + action);
+        if (el) el.onclick = () => window.electronAPI?.[action]();
+      });
+    });
+
+    // 全屏状态同步
+    if (window.electronAPI?.onFullScreenChange) {
+      window.electronAPI.onFullScreenChange((state) => {
+        const pp = document.getElementById('player-page');
+        if (!pp || pp.style.display === 'none') return;
+        const h = document.querySelector('.player-header');
+        const r = document.querySelector('.player-right');
+        const vi = document.getElementById('video-info');
+        const v = document.getElementById('video-player');
+        if (state.fullscreen) {
+          if (h) h.style.display = 'none';
+          if (r) r.style.display = 'none';
+          if (vi) vi.style.display = 'none';
+          if (v) v.style.objectFit = 'cover';
+        } else {
+          if (h) h.style.display = '';
+          if (r) r.style.display = '';
+          if (vi) vi.style.display = '';
+          if (v) v.style.objectFit = '';
+        }
+      });
+    }
+  </script>
   <script src="renderer.js"></script>
 </body>
 </html>

@@ -147,7 +147,7 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
       <div class="ep-select-header">
         <button id="ep-select-back">← 返回</button>
         <span class="ep-select-title" id="ep-select-title"></span>
-        <span></span>
+        <button id="ep-select-dl-all" class="ep-dl-all-btn">⬇️</button>
       </div>
       <div class="ep-select-body" id="ep-select-grid"></div>`;
     document.body.appendChild(epPage);
@@ -159,30 +159,73 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
     document.getElementById('app-layout').style.display = 'flex';
   };
 
+  // 全部下载按钮
+  const dlAllBtn = document.getElementById('ep-select-dl-all');
+  dlAllBtn.onclick = () => {
+    if (bridge.downloadAll) {
+      const titles = eps.map(e => e.title).join('|||');
+      const urls = eps.map(e => e.url).join('|||');
+      bridge.downloadAll(vodName, titles, urls);
+    } else {
+      alert('请更新到最新版本');
+    }
+  };
+
   // 选集列表
   const grid = document.getElementById('ep-select-grid');
   grid.innerHTML = eps.map((ep, i) =>
-    `<button class="ep-select-btn${i === startEp ? ' current' : ''}" data-idx="${i}">${ep.title}<br><small>${i === startEp ? '上次看到这里' : ''}</small></button>`
+    `<button class="ep-select-btn${i === startEp ? ' current' : ''}" data-idx="${i}" data-url="${ep.url}"><span class="ep-btn-label">${ep.title}</span><br><small>${i === startEp ? '上次看到这里' : ''}</small><span class="ep-dl-icon" title="下载">⬇️</span></button>`
   ).join('');
 
+  // 选集按钮 - 播放
   grid.querySelectorAll('.ep-select-btn').forEach(btn => {
-    btn.onclick = () => {
+    btn.onclick = (e) => {
+      if (e.target.classList.contains('ep-dl-icon')) return;
       const idx = parseInt(btn.dataset.idx);
       const ep = eps[idx];
       // 记录历史
       addHistory(vodId, vodName, vodPic || '', item.vod_remarks, idx, 0);
 
       if (bridge.playVideo) {
-        // 构建传给原生播放器的数据
         const titles = eps.map(e => e.title).join('|||');
         const urls = eps.map(e => e.url).join('|||');
         bridge.playVideo(ep.url, vodName, idx, titles, urls);
       } else {
-        // 桌面版降级
         alert('请在 Android 应用中打开');
       }
     };
   });
+
+  // 下载按钮事件
+  grid.querySelectorAll('.ep-dl-icon').forEach(dlIcon => {
+    dlIcon.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const btn = dlIcon.closest('.ep-select-btn');
+      const idx = parseInt(btn.dataset.idx);
+      const ep = eps[idx];
+      if (bridge.downloadVideo) {
+        bridge.downloadVideo(ep.url, vodName, ep.title, idx);
+        dlIcon.textContent = '⏳';
+        dlIcon.classList.add('downloading');
+      } else {
+        alert('请更新到最新版本');
+      }
+    });
+  });
+}
+
+// ===== 下载状态更新（由原生调用） =====
+function onDownloadStatus(epIdx, status) {
+  const grid = document.getElementById('ep-select-grid');
+  if (!grid) return;
+  const btn = grid.querySelector(`[data-idx="${epIdx}"]`);
+  if (!btn) return;
+  const icon = btn.querySelector('.ep-dl-icon');
+  if (!icon) return;
+  if (status === 'downloading') { icon.textContent = '⏳'; icon.classList.add('downloading'); icon.classList.remove('done', 'error'); }
+  else if (status === 'done') { icon.textContent = '✅'; icon.classList.remove('downloading'); icon.classList.add('done'); }
+  else if (status === 'error') { icon.textContent = '❌'; icon.classList.remove('downloading'); icon.classList.add('error'); }
 }
 
 // ===== 历史记录 =====
@@ -294,6 +337,13 @@ document.querySelectorAll('.filter-bar').forEach(bar => {
 // ===== 搜索触发 =====
 document.getElementById('home-search-input')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') doSearchFromHome();
+});
+
+document.getElementById('search-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const q = e.target.value.trim();
+    if (q) doSearch(q);
+  }
 });
 
 function toggleMobileSearch() {
