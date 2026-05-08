@@ -18,4 +18,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onFullScreenChange: (callback) => {
     ipcRenderer.on('fs-state-changed', (_event, state) => callback(state));
   },
+
+  // 下载功能
+  downloadEpisode: (vodName, epTitle, url) =>
+    ipcRenderer.invoke('download-episode', vodName, epTitle, url),
+  getDownloadDir: () => ipcRenderer.invoke('get-download-dir'),
+  openDownloadDir: () => ipcRenderer.invoke('open-download-dir'),
+
+  // 下载进度监听
+  onDownloadProgress: (callback) => {
+    ipcRenderer.on('download-progress', (_event, data) => callback(data));
+  },
 });

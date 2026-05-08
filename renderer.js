@@ -209,7 +209,7 @@ async function openPlayer(vodId, title) {
   // 选集列表
   const eg = document.getElementById('episode-grid');
   eg.innerHTML = eps.map((ep, i) =>
-    `<button class="ep-btn ${i===0?'active':''}" data-idx="${i}" data-url="${ep.url}">${ep.title}</button>`
+    `<button class="ep-btn ${i===0?'active':''}" data-idx="${i}" data-url="${ep.url}"><span class="ep-title">${ep.title}</span><span class="ep-download-btn" title="下载到本地">⬇️</span></button>`
   ).join('');
 
   // 先检查上次播放进度（从 localStorage 读，还没写入新记录）
@@ -240,6 +240,8 @@ async function openPlayer(vodId, title) {
 
   // 选集切换（事件委托）
   eg.onclick = e => {
+    // 忽略下载按钮点击
+    if (e.target.closest('.ep-download-btn')) return;
     const btn = e.target.closest('.ep-btn');
     if (!btn) return;
     eg.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
@@ -561,6 +563,151 @@ document.addEventListener('keydown', e => {
     if (isFullscreenMode) exitFullscreen();
     else closePlayer();
   }
+});
+
+// ===== 下载管理 =====
+const downloadTasks = {}; // url -> task info
+
+// 下载管理弹窗
+function openDownloadManager() {
+  document.getElementById('download-modal').style.display = 'flex';
+  // 显示下载目录路径
+  window.electronAPI?.getDownloadDir().then(dir => {
+    document.getElementById('dm-dir-path').textContent = dir;
+  });
+}
+
+function closeDownloadManager() {
+  document.getElementById('download-modal').style.display = 'none';
+}
+
+function renderDownloadList() {
+  const list = document.getElementById('download-list');
+  const empty = document.getElementById('download-empty');
+  const tasks = Object.values(downloadTasks);
+
+  if (!tasks.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+  list.innerHTML = tasks.map(t => {
+    const pct = t.pct || 0;
+    const statusText = t.status === 'downloading' ? `⏳ ${pct}%` :
+                       t.status === 'done' ? '✅ 已完成' :
+                       t.status === 'error' ? '❌ 失败' : '⏸️ 等待中';
+    const info = t.total ? `${formatBytes(t.downloaded)} / ${formatBytes(t.total)}` :
+                 t.totalSegments ? `分片 ${t.currentSegment || 0}/${t.totalSegments}` :
+                 formatBytes(t.downloaded || 0);
+    return `
+      <div class="download-item">
+        <div class="di-header">
+          <div class="di-name" title="${t.displayName}">${t.displayName}</div>
+          <span class="di-status ${t.status}">${statusText}</span>
+        </div>
+        ${t.status === 'downloading' ? `
+          <div class="di-progress-bar"><div class="di-progress-fill" style="width:${pct}%"></div></div>
+          <div class="di-info"><span class="di-pct">${pct}%</span><span>${info}</span></div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let b = bytes;
+  while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+  return b.toFixed(1) + ' ' + units[i];
+}
+
+// 启动下载
+async function startDownload(url, vodName, epTitle) {
+  if (!window.electronAPI) return;
+
+  // 检查是否已在下载
+  if (downloadTasks[url] && downloadTasks[url].status === 'downloading') return;
+
+  const displayName = `${vodName} - ${epTitle}`;
+  downloadTasks[url] = { displayName, status: 'downloading', pct: 0, downloaded: 0, total: 0 };
+  renderDownloadList();
+  // 更新选集按钮状态
+  updateEpBtnState(url, 'downloading');
+
+  try {
+    const result = await window.electronAPI.downloadEpisode(vodName, epTitle, url);
+    if (result && result.success) {
+      downloadTasks[url].status = 'done';
+      downloadTasks[url].pct = 100;
+      downloadTasks[url].filePath = result.filePath;
+      updateEpBtnState(url, 'done');
+    } else {
+      downloadTasks[url].status = 'error';
+      updateEpBtnState(url, 'error');
+    }
+  } catch (e) {
+    downloadTasks[url].status = 'error';
+    updateEpBtnState(url, 'error');
+  }
+  renderDownloadList();
+}
+
+function updateEpBtnState(url, state) {
+  const eg = document.getElementById('episode-grid');
+  if (!eg) return;
+  eg.querySelectorAll('.ep-btn').forEach(btn => {
+    if (btn.dataset.url === url) {
+      btn.classList.remove('downloading', 'done', 'error');
+      btn.classList.add(state);
+    }
+  });
+}
+
+// 监听主进程下载进度
+window.electronAPI?.onDownloadProgress && window.electronAPI.onDownloadProgress((data) => {
+  const task = Object.values(downloadTasks).find(t => t.displayName && data.filename && t.displayName.includes(data.filename.split('.')[0]));
+  if (task) {
+    task.status = data.status;
+    task.pct = data.pct || 0;
+    task.downloaded = data.downloaded || 0;
+    task.total = data.total || 0;
+    task.currentSegment = data.currentSegment;
+    task.totalSegments = data.totalSegments;
+    if (data.status === 'done') task.status = 'done';
+    renderDownloadList();
+  }
+});
+
+// 选集下载按钮事件（事件委托）
+document.getElementById('episode-grid')?.addEventListener('click', e => {
+  const dlBtn = e.target.closest('.ep-download-btn');
+  if (dlBtn) {
+    e.stopPropagation();
+    const epBtn = dlBtn.closest('.ep-btn');
+    if (epBtn) {
+      const url = epBtn.dataset.url;
+      const title = epBtn.querySelector('.ep-title')?.textContent || '';
+      const vodName = document.getElementById('player-title')?.textContent || '未知';
+      startDownload(url, vodName, title);
+    }
+    return;
+  }
+  // 原有的选集切换逻辑（由 openPlayer 中的 eg.onclick 处理）
+});
+
+// 下载管理按钮
+document.getElementById('open-download-mgr')?.addEventListener('click', openDownloadManager);
+document.getElementById('dm-close-btn')?.addEventListener('click', closeDownloadManager);
+document.getElementById('open-dir-btn')?.addEventListener('click', () => {
+  window.electronAPI?.openDownloadDir();
+});
+// 点击遮罩关闭
+document.getElementById('download-modal')?.addEventListener('click', e => {
+  if (e.target.id === 'download-modal') closeDownloadManager();
 });
 
 // ===== 启动 =====
