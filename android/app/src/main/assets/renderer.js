@@ -224,6 +224,7 @@ function onDownloadUpdate(taskId, status, progress, downloaded, total) {
 function onDownloadBatchUpdate(batchJson) {
   try {
     const batch = JSON.parse(batchJson);
+    if (!Array.isArray(batch)) return;
     batch.forEach(t => {
       dlQueue[t.taskId] = {
         name: t.name || t.taskId,
@@ -235,7 +236,7 @@ function onDownloadBatchUpdate(batchJson) {
       };
     });
     renderDownloadPage();
-  } catch (e) {}
+  } catch (e) { console.error('Batch update error:', e); }
 }
 
 function renderDownloadPage() {
