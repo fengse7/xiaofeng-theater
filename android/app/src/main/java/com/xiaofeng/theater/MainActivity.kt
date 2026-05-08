@@ -114,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         val safeEp = sanitizeFileName(epTitle)
         val ext = if (url.endsWith(".mp4")) ".mp4" else ".ts"
         val filename = "${safeTitle}_${safeEp}${ext}"
+        val taskId = "${title}_${epTitle}"
 
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle("${title} - ${epTitle}")
@@ -127,17 +128,33 @@ class MainActivity : AppCompatActivity() {
             val downloadId = downloadManager?.enqueue(request)
             if (downloadId != null) {
                 downloadQueue[downloadId] = epIdx
-                // 通知 WebView 下载已开始
+                // 通知 JS 下载进度
                 webView.post {
-                    webView.loadUrl("javascript:onDownloadStatus(${epIdx}, 'downloading')")
+                    webView.loadUrl("javascript:onDownloadProgress('${taskId}', '${sanitizeJsString(title + " " + epTitle)}', 'downloading', 0, 0, 0)")
                 }
             }
         } catch (e: Exception) {
             Log.e("XiaoFeng", "Download failed: ${e.message}")
             webView.post {
-                webView.loadUrl("javascript:onDownloadStatus(${epIdx}, 'error')")
+                webView.loadUrl("javascript:onDownloadProgress('${taskId}', '${sanitizeJsString(title + " " + epTitle)}', 'error', 0, 0, 0)")
             }
         }
+    }
+
+    @JavascriptInterface
+    fun openDownloadDir() {
+        runOnUiThread {
+            val uri = Uri.parse(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES).toString() + "/小风剧场")
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "*/*")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try { startActivity(intent) } catch (e: Exception) { Log.e("XiaoFeng", "Open dir failed: ${e.message}") }
+        }
+    }
+
+    private fun sanitizeJsString(s: String): String {
+        return s.replace("\\", "\\\\").replace("'", "\\'").replace("\"", "\\\"")
     }
 
     private fun sanitizeFileName(name: String): String {

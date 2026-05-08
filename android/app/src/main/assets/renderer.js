@@ -128,40 +128,21 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
   const eps = parsePlayUrl(item.vod_play_url);
   if (!eps.length) return alert('暂无播放源');
 
-  // 检查上次进度
   const prevHistory = getHistory().find(h => h.vodId === vodId);
   const prevEp = (prevHistory && prevHistory.epIdx !== undefined) ? prevHistory.epIdx : 0;
   const startEp = prevEp < eps.length ? prevEp : 0;
 
-  // 存入全局
   window._currentVod = { vodId, vodName, vodPic, item, eps, startEp };
 
-  // 显示选集页
-  document.getElementById('app-layout').style.display = 'none';
-  let epPage = document.getElementById('ep-select-page');
-  if (!epPage) {
-    epPage = document.createElement('div');
-    epPage.id = 'ep-select-page';
-    epPage.className = 'ep-select-page';
-    epPage.innerHTML = `
-      <div class="ep-select-header">
-        <button id="ep-select-back">← 返回</button>
-        <span class="ep-select-title" id="ep-select-title"></span>
-        <button id="ep-select-dl-all" class="ep-dl-all-btn">⬇️</button>
-      </div>
-      <div class="ep-select-body" id="ep-select-grid"></div>`;
-    document.body.appendChild(epPage);
-  }
+  const epPage = document.getElementById('ep-select-page');
   epPage.style.display = 'flex';
   document.getElementById('ep-select-title').textContent = vodName;
   document.getElementById('ep-select-back').onclick = () => {
     epPage.style.display = 'none';
-    document.getElementById('app-layout').style.display = 'flex';
   };
 
   // 全部下载按钮
-  const dlAllBtn = document.getElementById('ep-select-dl-all');
-  dlAllBtn.onclick = () => {
+  document.getElementById('ep-select-dl-all').onclick = () => {
     if (bridge.downloadAll) {
       const titles = eps.map(e => e.title).join('|||');
       const urls = eps.map(e => e.url).join('|||');
@@ -171,32 +152,27 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
     }
   };
 
-  // 选集列表
   const grid = document.getElementById('ep-select-grid');
   grid.innerHTML = eps.map((ep, i) =>
     `<button class="ep-select-btn${i === startEp ? ' current' : ''}" data-idx="${i}" data-url="${ep.url}"><span class="ep-btn-label">${ep.title}</span><br><small>${i === startEp ? '上次看到这里' : ''}</small><span class="ep-dl-icon" title="下载">⬇️</span></button>`
   ).join('');
 
-  // 选集按钮 - 播放
+  // 播放点击
   grid.querySelectorAll('.ep-select-btn').forEach(btn => {
     btn.onclick = (e) => {
       if (e.target.classList.contains('ep-dl-icon')) return;
       const idx = parseInt(btn.dataset.idx);
       const ep = eps[idx];
-      // 记录历史
       addHistory(vodId, vodName, vodPic || '', item.vod_remarks, idx, 0);
-
       if (bridge.playVideo) {
         const titles = eps.map(e => e.title).join('|||');
         const urls = eps.map(e => e.url).join('|||');
         bridge.playVideo(ep.url, vodName, idx, titles, urls);
-      } else {
-        alert('请在 Android 应用中打开');
       }
     };
   });
 
-  // 下载按钮事件
+  // 下载点击
   grid.querySelectorAll('.ep-dl-icon').forEach(dlIcon => {
     dlIcon.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -208,14 +184,12 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
         bridge.downloadVideo(ep.url, vodName, ep.title, idx);
         dlIcon.textContent = '⏳';
         dlIcon.classList.add('downloading');
-      } else {
-        alert('请更新到最新版本');
       }
     });
   });
 }
 
-// ===== 下载状态更新（由原生调用） =====
+// ===== 下载状态更新 =====
 function onDownloadStatus(epIdx, status) {
   const grid = document.getElementById('ep-select-grid');
   if (!grid) return;
@@ -226,6 +200,47 @@ function onDownloadStatus(epIdx, status) {
   if (status === 'downloading') { icon.textContent = '⏳'; icon.classList.add('downloading'); icon.classList.remove('done', 'error'); }
   else if (status === 'done') { icon.textContent = '✅'; icon.classList.remove('downloading'); icon.classList.add('done'); }
   else if (status === 'error') { icon.textContent = '❌'; icon.classList.remove('downloading'); icon.classList.add('error'); }
+}
+
+// ===== 下载列表渲染 =====
+const downloadTasks = {};
+
+function updateDownloadList() {
+  const container = document.getElementById('download-list-mobile');
+  const emptyEl = document.getElementById('download-empty-mobile');
+  const tasks = Object.values(downloadTasks);
+
+  if (!tasks.length) {
+    container.innerHTML = '<div class="download-empty">暂无下载任务<br><small>在剧集选择页面点击 ⬇️ 开始下载</small></div>';
+    return;
+  }
+
+  container.innerHTML = tasks.map(t => {
+    const pct = t.pct || 0;
+    const statusText = t.status === 'downloading' ? '下载中' : t.status === 'done' ? '已完成' : t.status === 'error' ? '失败' : '等待中';
+    return `
+      <div class="download-item">
+        <div class="di-name">${t.name || ''}</div>
+        <div class="di-status ${t.status}">${statusText}</div>
+        ${t.status === 'downloading' ? `
+          <div class="di-progress-bar"><div class="di-progress-fill" style="width:${pct}%"></div></div>
+          <div class="di-info"><span class="di-pct">${pct}%</span><span>${t.currentSegment ? `分片 ${t.currentSegment}/${t.totalSegments}` : ''}</span></div>
+        ` : ''}
+      </div>`;
+  }).join('');
+}
+
+function onDownloadProgress(taskId, name, status, pct, currentSegment, totalSegments) {
+  if (!downloadTasks[taskId]) {
+    downloadTasks[taskId] = { name, status, pct, currentSegment, totalSegments };
+  } else {
+    downloadTasks[taskId].status = status;
+    downloadTasks[taskId].pct = pct;
+    downloadTasks[taskId].currentSegment = currentSegment;
+    downloadTasks[taskId].totalSegments = totalSegments;
+    if (status === 'done' || status === 'error') downloadTasks[taskId].status = status;
+  }
+  updateDownloadList();
 }
 
 // ===== 历史记录 =====
@@ -253,7 +268,7 @@ function loadHistory() {
     title = document.createElement('div');
     title.id = 'history-title';
     title.className = 'section-header';
-    title.innerHTML = '<h2>📋 观看历史</h2><button class="btn" id="clear-history-btn" style="background:transparent;color:#a0a0b0;border:1px solid rgba(255,255,255,0.15);padding:4px 12px;border-radius:4px;font-size:12px">清空</button>';
+    title.innerHTML = '<h2>📋 观看历史</h2><button class="btn btn-sm" id="clear-history-btn">清空</button>';
     gr.parentNode.insertBefore(title, gr);
   }
   document.getElementById('clear-history-btn').onclick = () => {
@@ -314,6 +329,7 @@ document.querySelectorAll('.mobile-nav-item').forEach(item => {
     if (pid === 'home') await loadHome();
     else if (['domestic', 'us', 'international'].includes(pid)) await loadCategory(pid);
     else if (pid === 'search') loadHistory();
+    else if (pid === 'download') updateDownloadList();
   });
 });
 
@@ -340,16 +356,18 @@ document.getElementById('home-search-input')?.addEventListener('keydown', e => {
 });
 
 document.getElementById('search-input')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const q = e.target.value.trim();
-    if (q) doSearch(q);
-  }
+  if (e.key === 'Enter') { const q = e.target.value.trim(); if (q) doSearch(q); }
 });
 
 function toggleMobileSearch() {
   const bar = document.getElementById('mobile-search-bar');
   if (bar) bar.style.display = bar.style.display === 'flex' ? 'none' : 'flex';
 }
+
+// 打开目录
+document.getElementById('open-dir-btn-mobile')?.addEventListener('click', () => {
+  if (bridge.openDownloadDir) bridge.openDownloadDir();
+});
 
 // ===== 启动 =====
 loadHome();
