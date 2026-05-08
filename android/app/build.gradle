@@ -23,8 +23,8 @@ android {
         applicationId "com.xiaofeng.theater"
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1.0"
     }
 
     buildTypes {
@@ -34,9 +34,8 @@ android {
             debuggable false
         }
         debug {
-            // debug 使用默认 debug 签名
-            signingConfig null
-            debuggable true
+            // 用 release 签名打 debug 包，方便调试
+            signingConfig signingConfigs.release
         }
     }
     compileOptions {
