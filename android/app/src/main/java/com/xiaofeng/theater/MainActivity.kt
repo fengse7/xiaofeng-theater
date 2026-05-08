@@ -2,8 +2,10 @@ package com.xiaofeng.theater
 
 import android.annotation.SuppressLint
 import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -14,14 +16,25 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
-import java.net.HttpURLConnection
-import java.net.URL
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private var downloadManager: DownloadManager? = null
-    private val downloadQueue = mutableMapOf<Long, Int>() // downloadId -> epIdx
+    private val activeDownloads = mutableMapOf<Long, DownloadTask>()
+    private var downloadReceiverRegistered = false
+
+    data class DownloadTask(
+        val taskId: String,
+        val name: String,
+        var status: String = "queued",
+        var progress: Int = 0,
+        var downloaded: Long = 0,
+        var total: Long = 0,
+        var speed: Long = 0,
+        var lastBytes: Long = 0,
+        var lastTime: Long = 0
+    )
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,9 +42,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        registerDownloadReceiver()
 
         webView = findViewById(R.id.webview)
-
         WebView.setWebContentsDebuggingEnabled(true)
         webView.apply {
             settings.javaScriptEnabled = true
@@ -53,21 +66,76 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        if (downloadReceiverRegistered) {
+            try { unregisterReceiver(downloadReceiver) } catch (_: Exception) {}
+        }
+        super.onDestroy()
+    }
+
+    // 监听下载完成
+    private val downloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+            val task = activeDownloads[id] ?: return
+            val query = DownloadManager.Query().setFilterById(id)
+            val cursor = downloadManager?.query(query)
+            if (cursor != null && cursor.moveToFirst()) {
+                val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                if (statusIdx >= 0) {
+                    val status = cursor.getInt(statusIdx)
+                    when (status) {
+                        DownloadManager.STATUS_SUCCESSFUL -> {
+                            task.status = "done"
+                            task.progress = 100
+                            notifyJs()
+                        }
+                        DownloadManager.STATUS_FAILED -> {
+                            task.status = "error"
+                            notifyJs()
+                        }
+                    }
+                }
+            }
+            cursor?.close()
+        }
+    }
+
+    private fun registerDownloadReceiver() {
+        if (!downloadReceiverRegistered) {
+            registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+            downloadReceiverRegistered = true
+        }
+    }
+
+    private fun notifyJs() {
+        val arr = activeDownloads.values.map { t ->
+            """{"taskId":"${t.taskId}","name":"${jsEscape(t.name)}","status":"${t.status}","progress":${t.progress},"downloaded":${t.downloaded},"total":${t.total},"speed":"${formatSpeed(t.speed)}"}"""
+        }.joinToString(",", "[", "]")
+        webView.post { webView.loadUrl("javascript:onDownloadBatchUpdate('${jsEscape(arr)}')") }
+    }
+
+    private fun jsEscape(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("'", "\\'")
+
+    private fun formatSpeed(bytesPerSec: Long): String {
+        if (bytesPerSec < 1024) return "$bytesPerSec B/s"
+        if (bytesPerSec < 1024 * 1024) return "${bytesPerSec / 1024} KB/s"
+        return String.format("%.1f MB/s", bytesPerSec / (1024.0 * 1024.0))
+    }
+
     inner class AndroidBridge {
         @JavascriptInterface
-        fun fetchApi(url: String): String? {
-            return try {
-                val conn = URL(url).openConnection() as HttpURLConnection
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                conn.connectTimeout = 15000
-                conn.readTimeout = 15000
-                val text = conn.inputStream.bufferedReader().readText()
-                conn.disconnect()
-                text
-            } catch (e: Exception) {
-                Log.e("XiaoFeng", "fetchApi: ${e.message}")
-                null
-            }
+        fun fetchApi(url: String): String? = try {
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
+            val text = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            text
+        } catch (e: Exception) {
+            Log.e("XiaoFeng", "fetchApi: ${e.message}")
+            null
         }
 
         @JavascriptInterface
@@ -84,80 +152,95 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 下载单集
         @JavascriptInterface
         fun downloadVideo(url: String, title: String, epTitle: String, epIdx: Int) {
             runOnUiThread {
-                startDownload(url, title, epTitle, epIdx)
+                val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+                val safeEp = epTitle.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+                val ext = if (url.endsWith(".mp4")) ".mp4" else ".ts"
+                val filename = "${safeTitle}_${safeEp}${ext}"
+                val taskId = "${safeTitle}_${safeEp}"
+
+                val task = DownloadTask(taskId, "$title · $epTitle", "queued")
+                activeDownloads[taskId.hashCode().toLong()] = task
+
+                val request = DownloadManager.Request(Uri.parse(url))
+                    .setTitle("$title · $epTitle")
+                    .setDescription("小风剧场")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "小风剧场/$filename")
+                    .setAllowedOverMetered(true)
+                    .setAllowedOverRoaming(false)
+
+                try {
+                    val id = downloadManager?.enqueue(request) ?: return@runOnUiThread
+                    activeDownloads[id] = task
+                    task.status = "downloading"
+                    notifyJs()
+
+                    // 轮询进度
+                    Thread {
+                        var lastBytes = 0L
+                        var lastTime = System.currentTimeMillis()
+                        while (task.status == "downloading") {
+                            val query = DownloadManager.Query().setFilterById(id)
+                            val cursor = downloadManager?.query(query)
+                            if (cursor != null && cursor.moveToFirst()) {
+                                val bytesIdx = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                                val totalIdx = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                                if (bytesIdx >= 0) {
+                                    val bytes = cursor.getLong(bytesIdx)
+                                    val total = if (totalIdx >= 0) cursor.getLong(totalIdx) else 0
+                                    val now = System.currentTimeMillis()
+                                    val interval = now - lastTime
+                                    if (interval > 500) {
+                                        task.speed = ((bytes - lastBytes) * 1000) / interval
+                                        lastBytes = bytes
+                                        lastTime = now
+                                    }
+                                    task.downloaded = bytes
+                                    task.total = total
+                                    task.progress = if (total > 0) ((bytes * 100) / total).toInt() else 0
+                                    notifyJs()
+                                }
+                            }
+                            cursor?.close()
+                            Thread.sleep(500)
+                        }
+                    }.start()
+                } catch (e: Exception) {
+                    Log.e("XiaoFeng", "Download failed: ${e.message}")
+                    task.status = "error"
+                    notifyJs()
+                }
             }
         }
 
-        // 下载全部
         @JavascriptInterface
-        fun downloadAll(title: String, epTitles: String, epUrls: String) {
+        fun openDownloadDir() {
             runOnUiThread {
-                val titles = epTitles.split("|||")
-                val urls = epUrls.split("|||")
-                titles.forEachIndexed { idx, epTitle ->
-                    if (idx < urls.size) {
-                        startDownload(urls[idx], title, epTitle, idx)
-                        // 每集之间稍作延迟
-                        Thread.sleep(500)
-                    }
+                val dir = java.io.File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "小风剧场")
+                if (!dir.exists()) dir.mkdirs()
+                val uri = Uri.fromFile(dir)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "resource/folder")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                } else {
+                    intent.setDataAndType(uri, "*/*")
+                    try { startActivity(intent) } catch (_: Exception) {}
                 }
             }
         }
-    }
 
-    private fun startDownload(url: String, title: String, epTitle: String, epIdx: Int) {
-        val safeTitle = sanitizeFileName(title)
-        val safeEp = sanitizeFileName(epTitle)
-        val ext = if (url.endsWith(".mp4")) ".mp4" else ".ts"
-        val filename = "${safeTitle}_${safeEp}${ext}"
-        val taskId = "${title}_${epTitle}"
-
-        val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("${title} - ${epTitle}")
-            .setDescription("小风剧场下载中...")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "小风剧场/$filename")
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(false)
-
-        try {
-            val downloadId = downloadManager?.enqueue(request)
-            if (downloadId != null) {
-                downloadQueue[downloadId] = epIdx
-                // 通知 JS 下载进度
-                webView.post {
-                    webView.loadUrl("javascript:onDownloadProgress('${taskId}', '${sanitizeJsString(title + " " + epTitle)}', 'downloading', 0, 0, 0)")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("XiaoFeng", "Download failed: ${e.message}")
-            webView.post {
-                webView.loadUrl("javascript:onDownloadProgress('${taskId}', '${sanitizeJsString(title + " " + epTitle)}', 'error', 0, 0, 0)")
-            }
+        @JavascriptInterface
+        fun getDownloadTasksJson(): String {
+            val arr = activeDownloads.values.map { t ->
+                """{"taskId":"${t.taskId}","name":"${jsEscape(t.name)}","status":"${t.status}","progress":${t.progress},"downloaded":${t.downloaded},"total":${t.total},"speed":"${formatSpeed(t.speed)}"}"""
+            }.joinToString(",", "[", "]")
+            return arr
         }
-    }
-
-    @JavascriptInterface
-    fun openDownloadDir() {
-        runOnUiThread {
-            val uri = Uri.parse(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES).toString() + "/小风剧场")
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "*/*")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            try { startActivity(intent) } catch (e: Exception) { Log.e("XiaoFeng", "Open dir failed: ${e.message}") }
-        }
-    }
-
-    private fun sanitizeJsString(s: String): String {
-        return s.replace("\\", "\\\\").replace("'", "\\'").replace("\"", "\\\"")
-    }
-
-    private fun sanitizeFileName(name: String): String {
-        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
     }
 }

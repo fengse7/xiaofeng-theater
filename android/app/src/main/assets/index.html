@@ -8,16 +8,19 @@
 </head>
 <body>
   <div class="app-layout" id="app-layout">
+    <!-- 顶部 -->
     <div class="mobile-navbar">
       <span class="logo">💨 小风剧场</span>
       <div class="mobile-search-toggle" onclick="toggleMobileSearch()">🔍</div>
     </div>
 
+    <!-- 搜索栏 -->
     <div class="mobile-search-bar" id="mobile-search-bar">
       <input type="text" id="home-search-input" placeholder="搜索剧名、演员…">
       <button class="btn btn-search" onclick="doSearchFromHome()">搜索</button>
     </div>
 
+    <!-- 主内容 -->
     <main class="content">
       <section id="page-home" class="page active">
         <div class="hero" id="hero">
@@ -90,17 +93,23 @@
         <div class="card-grid" id="search-results"></div>
       </section>
 
+      <!-- 下载管理页 -->
       <section id="page-download" class="page">
-        <div class="section-header download-header">
+        <div class="download-page-header">
           <h2>⬇️ 下载管理</h2>
           <button class="btn btn-sm" id="open-dir-btn-mobile">📂 打开目录</button>
         </div>
-        <div class="download-body" id="download-list-mobile">
-          <div class="download-empty" id="download-empty-mobile">暂无下载任务</div>
+        <div class="download-page-body" id="download-list-mobile">
+          <div class="empty-state">
+            <div class="empty-icon">📥</div>
+            暂无下载任务
+            <br><small>在剧集页面选择剧集开始下载</small>
+          </div>
         </div>
       </section>
     </main>
 
+    <!-- 底部导航 -->
     <nav class="mobile-nav">
       <div class="mobile-nav-item active" data-page="home"><span>🏠</span><span>首页</span></div>
       <div class="mobile-nav-item" data-page="domestic"><span>🇨🇳</span><span>国产剧</span></div>
@@ -110,7 +119,6 @@
       <div class="mobile-nav-item" data-page="download"><span>⬇️</span><span>下载</span></div>
     </nav>
   </div>
-  <!-- app-layout 结束 -->
 
   <script src="hls.min.js"></script>
   <script src="renderer.js"></script>

@@ -1,4 +1,4 @@
-// ===== 小风剧场 Android 版 =====
+// ===== 小风剧场 Android 版 v1.2 =====
 
 const CATEGORY_IDS = { home: [13, 16, 15], domestic: 13, us: 16, international: [15, 22, 23] };
 const CATEGORY_NAMES = { 13: '国产剧', 14: '香港剧', 15: '韩剧', 16: '美剧', 22: '日剧', 23: '海外剧' };
@@ -120,7 +120,7 @@ async function loadCategory(pid, filterClass = '', filterType = '') {
   }
 }
 
-// ===== 选集页面（动态创建，放在 app-layout 外面） =====
+// ===== 选集页面（原始逻辑，动态创建在 body 外） =====
 async function openEpisodeSelect(vodId, vodName, vodPic) {
   const d = await apiGet({ ids: vodId });
   if (!d?.list?.[0]) return alert('获取失败');
@@ -128,18 +128,14 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
   const eps = parsePlayUrl(item.vod_play_url);
   if (!eps.length) return alert('暂无播放源');
 
-  // 检查上次进度
   const prevHistory = getHistory().find(h => h.vodId === vodId);
   const prevEp = (prevHistory && prevHistory.epIdx !== undefined) ? prevHistory.epIdx : 0;
   const startEp = prevEp < eps.length ? prevEp : 0;
 
-  // 存入全局
   window._currentVod = { vodId, vodName, vodPic, item, eps, startEp };
 
-  // 隐藏主界面
   document.getElementById('app-layout').style.display = 'none';
 
-  // 选集页 — 动态创建到 body 外面，不被 app-layout 影响
   let epPage = document.getElementById('ep-select-page');
   if (!epPage) {
     epPage = document.createElement('div');
@@ -151,49 +147,130 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
     <div class="ep-select-header">
       <button id="ep-select-back">← 返回</button>
       <span class="ep-select-title" id="ep-select-title"></span>
-      <button id="ep-select-dl-all" class="ep-dl-all-btn" title="全部下载">⬇️</button>
+      <button id="ep-select-dl-all" class="ep-dl-all-btn" title="全部下载">⬇️ 全部下载</button>
     </div>
     <div class="ep-select-body" id="ep-select-grid"></div>`;
   epPage.style.display = 'flex';
 
   document.getElementById('ep-select-title').textContent = vodName;
 
-  // 返回按钮
   document.getElementById('ep-select-back').onclick = () => {
     epPage.style.display = 'none';
     document.getElementById('app-layout').style.display = 'flex';
   };
 
-  // 全部下载按钮
+  // 全部下载
   document.getElementById('ep-select-dl-all').onclick = () => {
-    if (bridge.downloadAll) {
-      const titles = eps.map(e => e.title).join('|||');
-      const urls = eps.map(e => e.url).join('|||');
-      bridge.downloadAll(vodName, titles, urls);
-    }
+    if (!bridge.downloadVideo) return;
+    eps.forEach((ep, i) => {
+      setTimeout(() => bridge.downloadVideo(ep.url, vodName, ep.title, i), i * 300);
+    });
   };
 
-  // 选集列表
   const grid = document.getElementById('ep-select-grid');
   grid.innerHTML = eps.map((ep, i) =>
-    `<button class="ep-select-btn${i === startEp ? ' current' : ''}" data-idx="${i}">${ep.title}<br><small>${i === startEp ? '上次看到这里' : ''}</small></button>`
+    `<button class="ep-select-btn${i === startEp ? ' current' : ''}" data-idx="${i}" data-url="${ep.url}">${ep.title}<span class="ep-dl-status" data-ep="${i}"></span><br><small>${i === startEp ? '上次看到这里' : ''}</small></button>`
   ).join('');
 
-  // 每集按钮
   grid.querySelectorAll('.ep-select-btn').forEach(btn => {
     btn.onclick = () => {
       const idx = parseInt(btn.dataset.idx);
       const ep = eps[idx];
-      // 记录历史
       addHistory(vodId, vodName, vodPic || '', item.vod_remarks, idx, 0);
-
       if (bridge.playVideo) {
         const titles = eps.map(e => e.title).join('|||');
         const urls = eps.map(e => e.url).join('|||');
         bridge.playVideo(ep.url, vodName, idx, titles, urls);
       }
     };
+    // 长按下载
+    btn.addEventListener('long-press', () => {
+      const idx = parseInt(btn.dataset.idx);
+      const ep = eps[idx];
+      if (bridge.downloadVideo) bridge.downloadVideo(ep.url, vodName, ep.title, idx);
+    });
+    // 长按检测
+    let pressTimer;
+    btn.addEventListener('touchstart', () => {
+      pressTimer = setTimeout(() => {
+        btn.dispatchEvent(new Event('long-press'));
+      }, 600);
+    });
+    btn.addEventListener('touchend', () => clearTimeout(pressTimer));
+    btn.addEventListener('touchmove', () => clearTimeout(pressTimer));
   });
+}
+
+// ===== 下载状态回调（从原生调用） =====
+const dlQueue = {};
+
+function onDownloadUpdate(taskId, status, progress, downloaded, total) {
+  const task = dlQueue[taskId] || {};
+  dlQueue[taskId] = { ...task, status, progress: progress || 0, downloaded: downloaded || 0, total: total || 0 };
+
+  // 更新选集页图标
+  const statusEl = document.querySelector(`.ep-dl-status[data-ep="${taskId.split('_').pop()}"]`);
+  if (statusEl) {
+    if (status === 'queued') { statusEl.textContent = '🕐'; statusEl.classList.add('show'); }
+    else if (status === 'downloading') { statusEl.textContent = '⏳'; statusEl.classList.add('show'); }
+    else if (status === 'done') { statusEl.textContent = '✅'; statusEl.classList.add('show'); }
+    else if (status === 'error') { statusEl.textContent = '❌'; statusEl.classList.add('show'); }
+  }
+
+  // 更新下载页面
+  renderDownloadPage();
+}
+
+function onDownloadBatchUpdate(batchJson) {
+  try {
+    const batch = JSON.parse(batchJson);
+    batch.forEach(t => {
+      dlQueue[t.taskId] = {
+        name: t.name || t.taskId,
+        status: t.status,
+        progress: t.progress || 0,
+        downloaded: t.downloaded || 0,
+        total: t.total || 0,
+        speed: t.speed || ''
+      };
+    });
+    renderDownloadPage();
+  } catch (e) {}
+}
+
+function renderDownloadPage() {
+  const container = document.getElementById('download-list-mobile');
+  if (!container) return;
+  const tasks = Object.values(dlQueue);
+  if (!tasks.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📥</div>暂无下载任务<br><small>在剧集页面选择剧集开始下载</small></div>';
+    return;
+  }
+  container.innerHTML = tasks.map(t => {
+    const statusClass = t.status || 'queued';
+    const statusText = { queued: '排队中', downloading: '下载中', done: '已完成', error: '失败' }[statusClass] || statusClass;
+    const sizeStr = formatSize(t.downloaded) + (t.total ? ' / ' + formatSize(t.total) : '');
+    return `
+      <div class="dl-item">
+        <div class="dl-item-header">
+          <div class="dl-item-name">${t.name || ''}</div>
+          <div class="dl-item-status ${statusClass}">${statusText}</div>
+        </div>
+        ${statusClass === 'downloading' ? `
+          <div class="dl-progress"><div class="dl-progress-bar" style="width:${t.progress}%"></div></div>
+          <div class="dl-item-footer"><span>${t.progress}%</span><span class="dl-speed">${t.speed || ''}</span><span class="dl-size">${sizeStr}</span></div>
+        ` : ''}
+        ${statusClass === 'done' ? `<div class="dl-item-footer"><span>已完成</span><span class="dl-size">${sizeStr}</span></div>` : ''}
+        ${statusClass === 'error' ? `<div class="dl-item-footer"><span>下载失败</span></div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB']; let i = 0, b = bytes;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return b.toFixed(1) + ' ' + u[i];
 }
 
 // ===== 历史记录 =====
@@ -227,7 +304,7 @@ function loadHistory() {
   document.getElementById('clear-history-btn').onclick = () => {
     if (confirm('确定清空观看历史？')) { localStorage.removeItem(HISTORY_KEY); loadHistory(); }
   };
-  if (!list.length) { gr.innerHTML = '<p style="color:#666;text-align:center;padding:40px">暂无观看记录</p>'; return; }
+  if (!list.length) { gr.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div>暂无观看记录</div>'; return; }
   gr.innerHTML = '';
   list.forEach(i => {
     const card = document.createElement('div');
@@ -256,9 +333,10 @@ async function doSearch(query) {
   if (sb) sb.style.display = '';
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-search').classList.add('active');
+  document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
   const gr = document.getElementById('search-results');
   if (!d?.list || !d.list.length) {
-    gr.innerHTML = '<p style="color:#666;text-align:center;padding:40px">未找到结果</p>';
+    gr.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div>未找到结果</div>';
   } else {
     gr.innerHTML = '';
     d.list.forEach(i => gr.appendChild(createCard(i)));
@@ -282,7 +360,7 @@ document.querySelectorAll('.mobile-nav-item').forEach(item => {
     if (pid === 'home') await loadHome();
     else if (['domestic', 'us', 'international'].includes(pid)) await loadCategory(pid);
     else if (pid === 'search') loadHistory();
-    else if (pid === 'download') loadDownloadPage();
+    else if (pid === 'download') renderDownloadPage();
   });
 });
 
@@ -307,7 +385,6 @@ document.querySelectorAll('.filter-bar').forEach(bar => {
 document.getElementById('home-search-input')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') doSearchFromHome();
 });
-
 document.getElementById('search-input')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') { const q = e.target.value.trim(); if (q) doSearch(q); }
 });
@@ -317,16 +394,11 @@ function toggleMobileSearch() {
   if (bar) bar.style.display = bar.style.display === 'flex' ? 'none' : 'flex';
 }
 
-// ===== 下载功能 =====
-function loadDownloadPage() {
-  const container = document.getElementById('download-list-mobile');
-  container.innerHTML = '<div class="download-empty">暂无下载任务<br><small>在剧集选择页面点击 ⬇️ 开始下载</small></div>';
-}
-
+// 打开下载目录
 document.getElementById('open-dir-btn-mobile')?.addEventListener('click', () => {
   if (bridge.openDownloadDir) bridge.openDownloadDir();
 });
 
 // ===== 启动 =====
 loadHome();
-console.log('💨 小风剧场 Android 版已启动！');
+console.log('💨 小风剧场 v1.2 已启动！');
