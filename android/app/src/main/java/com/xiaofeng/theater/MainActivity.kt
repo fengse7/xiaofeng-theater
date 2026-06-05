@@ -76,7 +76,46 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             addJavascriptInterface(AndroidBridge(), "androidBridge")
-            loadUrl("file:///android_asset/index.html")
+        }
+
+        // 恢复 WebView 状态，避免后台回来重新加载
+        if (savedInstanceState != null) {
+            webView.restoreState(savedInstanceState)
+        } else {
+            webView.loadUrl("file:///android_asset/index.html")
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        webView.saveState(outState)
+    }
+
+    // ===== 返回键：选集页 → 分类页 → 首页 → 退出 =====
+    @SuppressLint("MissingSuperCall")
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        val js = """(function(){
+            var ep=document.getElementById('ep-select-page');
+            if(ep && ep.style.display!=='none' && ep.style.display!==''){
+                ep.style.display='none';
+                document.getElementById('app-layout').style.display='flex';
+                return 'episode';
+            }
+            var home=document.getElementById('page-home');
+            if(!home.classList.contains('active')){
+                document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
+                home.classList.add('active');
+                document.querySelectorAll('.mobile-nav-item').forEach(function(n){n.classList.remove('active')});
+                var hn=document.querySelector('.mobile-nav-item[data-page="home"]');
+                if(hn)hn.classList.add('active');
+                return 'toHome';
+            }
+            return 'exit';
+        })()"""
+        webView.evaluateJavascript(js) { value ->
+            val result = value?.trim('"') ?: "exit"
+            if (result == "exit") finish()
         }
     }
 
