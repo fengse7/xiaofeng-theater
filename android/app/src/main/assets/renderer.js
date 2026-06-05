@@ -177,7 +177,7 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
     <div class="ep-select-header">
       <button id="ep-select-back">← 返回</button>
       <span class="ep-select-title" id="ep-select-title"></span>
-      <button id="ep-select-dl-all" class="ep-dl-all-btn" title="全部下载">⬇️ 全部下载</button>
+      <span></span>
     </div>
     <div class="ep-select-body" id="ep-select-grid"></div>`;
   epPage.style.display = 'flex';
@@ -189,17 +189,9 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
     document.getElementById('app-layout').style.display = 'flex';
   };
 
-  // 全部下载
-  document.getElementById('ep-select-dl-all').onclick = () => {
-    if (!bridge.downloadVideo) return;
-    eps.forEach((ep, i) => {
-      setTimeout(() => bridge.downloadVideo(ep.url, vodName, ep.title, i), i * 300);
-    });
-  };
-
   const grid = document.getElementById('ep-select-grid');
   grid.innerHTML = eps.map((ep, i) =>
-    `<button class="ep-select-btn${i === startEp ? ' current' : ''}" data-idx="${i}" data-url="${ep.url}">${ep.title}<span class="ep-dl-status" data-ep="${i}"></span><br><small>${i === startEp ? '上次看到这里' : ''}</small></button>`
+    `<button class="ep-select-btn${i === startEp ? ' current' : ''}" data-idx="${i}">${ep.title}<br><small>${i === startEp ? '上次看到这里' : ''}</small></button>`
   ).join('');
 
   grid.querySelectorAll('.ep-select-btn').forEach(btn => {
@@ -213,95 +205,7 @@ async function openEpisodeSelect(vodId, vodName, vodPic) {
         bridge.playVideo(ep.url, vodName, idx, titles, urls);
       }
     };
-    // 长按下载
-    btn.addEventListener('long-press', () => {
-      const idx = parseInt(btn.dataset.idx);
-      const ep = eps[idx];
-      if (bridge.downloadVideo) bridge.downloadVideo(ep.url, vodName, ep.title, idx);
-    });
-    // 长按检测
-    let pressTimer;
-    btn.addEventListener('touchstart', () => {
-      pressTimer = setTimeout(() => {
-        btn.dispatchEvent(new Event('long-press'));
-      }, 600);
-    });
-    btn.addEventListener('touchend', () => clearTimeout(pressTimer));
-    btn.addEventListener('touchmove', () => clearTimeout(pressTimer));
   });
-}
-
-// ===== 下载状态回调（从原生调用） =====
-const dlQueue = {};
-
-function onDownloadUpdate(taskId, status, progress, downloaded, total) {
-  const task = dlQueue[taskId] || {};
-  dlQueue[taskId] = { ...task, status, progress: progress || 0, downloaded: downloaded || 0, total: total || 0 };
-
-  // 更新选集页图标
-  const statusEl = document.querySelector(`.ep-dl-status[data-ep="${taskId.split('_').pop()}"]`);
-  if (statusEl) {
-    if (status === 'queued') { statusEl.textContent = '🕐'; statusEl.classList.add('show'); }
-    else if (status === 'downloading') { statusEl.textContent = '⏳'; statusEl.classList.add('show'); }
-    else if (status === 'done') { statusEl.textContent = '✅'; statusEl.classList.add('show'); }
-    else if (status === 'error') { statusEl.textContent = '❌'; statusEl.classList.add('show'); }
-  }
-
-  // 更新下载页面
-  renderDownloadPage();
-}
-
-function onDownloadBatchUpdate(batchJson) {
-  try {
-    const batch = JSON.parse(batchJson);
-    if (!Array.isArray(batch)) return;
-    batch.forEach(t => {
-      dlQueue[t.taskId] = {
-        name: t.name || t.taskId,
-        status: t.status,
-        progress: t.progress || 0,
-        downloaded: t.downloaded || 0,
-        total: t.total || 0,
-        speed: t.speed || ''
-      };
-    });
-    renderDownloadPage();
-  } catch (e) { console.error('Batch update error:', e); }
-}
-
-function renderDownloadPage() {
-  const container = document.getElementById('download-list-mobile');
-  if (!container) return;
-  const tasks = Object.values(dlQueue);
-  if (!tasks.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📥</div>暂无下载任务<br><small>在剧集页面选择剧集开始下载</small></div>';
-    return;
-  }
-  container.innerHTML = tasks.map(t => {
-    const statusClass = t.status || 'queued';
-    const statusText = { queued: '排队中', downloading: '下载中', done: '已完成', error: '失败' }[statusClass] || statusClass;
-    const sizeStr = formatSize(t.downloaded) + (t.total ? ' / ' + formatSize(t.total) : '');
-    return `
-      <div class="dl-item">
-        <div class="dl-item-header">
-          <div class="dl-item-name">${t.name || ''}</div>
-          <div class="dl-item-status ${statusClass}">${statusText}</div>
-        </div>
-        ${statusClass === 'downloading' ? `
-          <div class="dl-progress"><div class="dl-progress-bar" style="width:${t.progress}%"></div></div>
-          <div class="dl-item-footer"><span>${t.progress}%</span><span class="dl-speed">${t.speed || ''}</span><span class="dl-size">${sizeStr}</span></div>
-        ` : ''}
-        ${statusClass === 'done' ? `<div class="dl-item-footer"><span>已完成</span><span class="dl-size">${sizeStr}</span></div>` : ''}
-        ${statusClass === 'error' ? `<div class="dl-item-footer"><span>下载失败</span></div>` : ''}
-      </div>`;
-  }).join('');
-}
-
-function formatSize(bytes) {
-  if (!bytes || bytes === 0) return '0 B';
-  const u = ['B', 'KB', 'MB', 'GB']; let i = 0, b = bytes;
-  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
-  return b.toFixed(1) + ' ' + u[i];
 }
 
 // ===== 历史记录 =====
@@ -392,7 +296,6 @@ document.querySelectorAll('.mobile-nav-item').forEach(item => {
     if (pid === 'home') await loadHome();
     else if (['domestic', 'us', 'international'].includes(pid)) await loadCategory(pid);
     else if (pid === 'search') loadHistory();
-    else if (pid === 'download') renderDownloadPage();
   });
 });
 
@@ -425,11 +328,6 @@ function toggleMobileSearch() {
   const bar = document.getElementById('mobile-search-bar');
   if (bar) bar.style.display = bar.style.display === 'flex' ? 'none' : 'flex';
 }
-
-// 打开下载目录
-document.getElementById('open-dir-btn-mobile')?.addEventListener('click', () => {
-  if (bridge.openDownloadDir) bridge.openDownloadDir();
-});
 
 // ===== 启动 =====
 loadHome();
