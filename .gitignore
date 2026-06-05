@@ -9,6 +9,7 @@ Thumbs.db
 android/.gradle/
 android/app/build/
 android/local.properties
+android/gradle.properties
 android/xiaofeng.keystore
 android/*.apk
 *.keystore
