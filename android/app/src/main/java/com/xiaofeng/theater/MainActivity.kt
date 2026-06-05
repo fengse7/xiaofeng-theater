@@ -40,10 +40,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var webView: WebView
+    private var startTime = 0L
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        startTime = System.currentTimeMillis()
+        Log.i("XiaoFeng", "onCreate start")
         setContentView(R.layout.activity_main)
 
         webView = findViewById(R.id.webview)
@@ -58,7 +61,7 @@ class MainActivity : AppCompatActivity() {
             settings.loadsImagesAutomatically = true
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
-                    Log.i("XiaoFeng", "WebView loaded")
+                    Log.i("XiaoFeng", "WebView loaded: +${System.currentTimeMillis() - startTime}ms")
                 }
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                     Log.e("XiaoFeng", "Resource error: ${request?.url} - ${error?.description}")
@@ -121,6 +124,7 @@ class MainActivity : AppCompatActivity() {
 
     // ===== 图片拦截（绕过 DNS 污染） =====
     private fun interceptImage(url: String): WebResourceResponse? {
+        val t0 = System.currentTimeMillis()
         try {
             val parsed = URL(url)
             val host = parsed.host
@@ -172,9 +176,10 @@ class MainActivity : AppCompatActivity() {
                 ?.substringAfter(":")?.trim()?.split(";")?.firstOrNull() ?: "image/jpeg"
             val body = readHttpBody(headers, input)
             sslSocket.close()
+            Log.i("XiaoFeng", "interceptImage ${System.currentTimeMillis()-t0}ms ${url.takeLast(40)}")
             return WebResourceResponse(mime, "utf-8", java.io.ByteArrayInputStream(body))
         } catch (e: Exception) {
-            Log.e("XiaoFeng", "interceptImage: ${e.message}")
+            Log.e("XiaoFeng", "interceptImage ${System.currentTimeMillis()-t0}ms FAIL: ${e.message}")
             return null
         }
     }

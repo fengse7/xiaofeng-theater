@@ -330,5 +330,5 @@ function toggleMobileSearch() {
 }
 
 // ===== 启动 =====
-loadHome();
-console.log('💨 小风剧场 v1.2 已启动！');
+console.log('💨 小风剧场 v1.2 已启动！ +0ms');
+loadHome().then(() => console.log('loadHome done +' + (performance.now()|0) + 'ms'));
