@@ -99,7 +99,11 @@ function renderGrid(gid, items) {
   if (!g) return;
   g.innerHTML = '';
   if (!items || !items.length) { g.innerHTML = '<p style="color:#666;grid-column:1/-1;text-align:center;padding:40px">暂无数据</p>'; return; }
-  items.forEach(i => g.appendChild(createCard(i)));
+  items.forEach((i, idx) => {
+    const card = createCard(i);
+    card.style.animationDelay = (idx * 40) + 'ms';
+    g.appendChild(card);
+  });
 }
 
 // ===== 首页 =====
@@ -240,21 +244,48 @@ function loadHistory() {
   };
   if (!list.length) { gr.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div>暂无观看记录</div>'; return; }
   gr.innerHTML = '';
-  list.forEach(i => {
-    const card = document.createElement('div');
-    card.className = 'video-card';
-    card.innerHTML = `
-      ${i.vodPic ? `<div class="card-thumb"><img data-src="${i.vodPic}" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="loadImageFallback(this)"><span class="thumb-emoji">🎬</span></div>`
-                 : `<div class="card-thumb thumb-fallback"><span class="thumb-emoji">🎬</span></div>`}
-      <div class="card-info">
-        <div class="card-title">${i.vodName || '未知'}</div>
-        <div class="card-meta">${i.vodRemarks || ''}</div>
-        ${i.epIdx !== undefined ? `<div class="card-remarks">▶ 第${i.epIdx+1}集</div>` : ''}
-      </div>`;
-    card.addEventListener('click', () => openEpisodeSelect(i.vodId, i.vodName, i.vodPic));
-    gr.appendChild(card);
-    requestAnimationFrame(() => loadCardImage(card));
-  });
+
+  // 分批渲染：先显示前 12 条，滚动到底部再加载更多
+  const PAGE_SIZE = 12;
+  let loaded = 0;
+
+  function renderBatch() {
+    const batch = list.slice(loaded, loaded + PAGE_SIZE);
+    batch.forEach((i, idx) => {
+      const card = document.createElement('div');
+      card.className = 'video-card';
+      card.style.animationDelay = (idx * 30) + 'ms';
+      card.innerHTML = `
+        ${i.vodPic ? `<div class="card-thumb"><img data-src="${i.vodPic}" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="loadImageFallback(this)"><span class="thumb-emoji">🎬</span></div>`
+                   : `<div class="card-thumb thumb-fallback"><span class="thumb-emoji">🎬</span></div>`}
+        <div class="card-info">
+          <div class="card-title">${i.vodName || '未知'}</div>
+          <div class="card-meta">${i.vodRemarks || ''}</div>
+          ${i.epIdx !== undefined ? `<div class="card-remarks">▶ 第${i.epIdx+1}集</div>` : ''}
+        </div>`;
+      card.addEventListener('click', () => openEpisodeSelect(i.vodId, i.vodName, i.vodPic));
+      gr.appendChild(card);
+      setTimeout(() => loadCardImage(card), idx * 100);
+    });
+    loaded += batch.length;
+  }
+
+  renderBatch();
+
+  // 滚动到底部时加载更多
+  if (loaded < list.length) {
+    const sentinel = document.createElement('div');
+    sentinel.id = 'history-sentinel';
+    sentinel.style.height = '1px';
+    gr.appendChild(sentinel);
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && loaded < list.length) {
+        renderBatch();
+        if (loaded >= list.length) { observer.disconnect(); sentinel.remove(); }
+      }
+    }, { root: document.querySelector('.content') });
+    observer.observe(sentinel);
+  }
 }
 
 // ===== 搜索 =====
