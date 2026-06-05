@@ -149,9 +149,11 @@ function renderGrid(gid, items) {
         spinner.className = 'grid-loading';
         spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
         g.appendChild(spinner);
+        const startTime = Date.now();
         renderBatch(() => {
-          spinner.remove();
-          loading = false;
+          const elapsed = Date.now() - startTime;
+          const remain = Math.max(0, 1000 - elapsed);
+          setTimeout(() => { spinner.remove(); loading = false; }, remain);
         });
       }
     });
@@ -348,9 +350,11 @@ function loadHistory() {
         spinner.className = 'grid-loading';
         spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
         gr.appendChild(spinner);
+        const startTime = Date.now();
         renderBatch(() => {
-          spinner.remove();
-          histLoading = false;
+          const elapsed = Date.now() - startTime;
+          const remain = Math.max(0, 1000 - elapsed);
+          setTimeout(() => { spinner.remove(); histLoading = false; }, remain);
         });
       }
     });
