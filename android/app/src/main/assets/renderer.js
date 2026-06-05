@@ -99,11 +99,36 @@ function renderGrid(gid, items) {
   if (!g) return;
   g.innerHTML = '';
   if (!items || !items.length) { g.innerHTML = '<p style="color:#666;grid-column:1/-1;text-align:center;padding:40px">暂无数据</p>'; return; }
-  items.forEach((i, idx) => {
-    const card = createCard(i);
-    card.style.animationDelay = (idx * 40) + 'ms';
-    g.appendChild(card);
-  });
+
+  const PAGE_SIZE = 12;
+  let loaded = 0;
+
+  function renderBatch() {
+    const batch = items.slice(loaded, loaded + PAGE_SIZE);
+    batch.forEach((i, idx) => {
+      const card = createCard(i);
+      card.style.animationDelay = (idx * 40) + 'ms';
+      g.appendChild(card);
+    });
+    loaded += batch.length;
+  }
+
+  renderBatch();
+
+  if (loaded < items.length) {
+    const sentinel = document.createElement('div');
+    sentinel.className = 'grid-sentinel';
+    sentinel.style.height = '1px';
+    g.appendChild(sentinel);
+    const scrollRoot = document.querySelector('.content');
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && loaded < items.length) {
+        renderBatch();
+        if (loaded >= items.length) { observer.disconnect(); sentinel.remove(); }
+      }
+    }, { root: scrollRoot, rootMargin: '200px' });
+    observer.observe(sentinel);
+  }
 }
 
 // ===== 首页 =====
