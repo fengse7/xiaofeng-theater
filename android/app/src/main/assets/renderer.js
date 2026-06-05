@@ -138,7 +138,15 @@ function renderGrid(gid, items) {
         return;
       }
       if (!loading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
-        renderBatch();
+        loading = true;
+        // 先显示 spinner，等浏览器绘制完再加载下一批
+        const oldSpinner = g.querySelector('.grid-loading');
+        if (oldSpinner) oldSpinner.remove();
+        const spinner = document.createElement('div');
+        spinner.className = 'grid-loading';
+        spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
+        g.appendChild(spinner);
+        requestAnimationFrame(() => setTimeout(renderBatch, 150));
       }
     });
   }
@@ -313,13 +321,25 @@ function loadHistory() {
   // 滚动到底部时加载更多
   if (loaded < list.length) {
     const scrollEl = document.querySelector('.content');
+    let histLoading = false;
     scrollEl.addEventListener('scroll', function onScroll() {
       if (loaded >= list.length) {
         scrollEl.removeEventListener('scroll', onScroll);
         return;
       }
-      if (scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
-        renderBatch();
+      if (!histLoading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
+        histLoading = true;
+        const spinner = document.createElement('div');
+        spinner.className = 'grid-loading';
+        spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
+        gr.appendChild(spinner);
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            spinner.remove();
+            renderBatch();
+            histLoading = false;
+          }, 150);
+        });
       }
     });
   }
