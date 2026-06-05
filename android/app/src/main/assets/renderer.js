@@ -105,13 +105,14 @@ function renderGrid(gid, items) {
 
   const PAGE_SIZE = 12;
   let loaded = 0;
-  let observer = null;
+  let loading = false;
 
   function renderBatch() {
-    const batch = items.slice(loaded, loaded + PAGE_SIZE);
+    loading = true;
     // 移除旧的 loading spinner
     const oldSpinner = g.querySelector('.grid-loading');
     if (oldSpinner) oldSpinner.remove();
+    const batch = items.slice(loaded, loaded + PAGE_SIZE);
     batch.forEach((i, idx) => {
       const card = createCard(i);
       card.style.animationDelay = (idx * 40) + 'ms';
@@ -119,30 +120,27 @@ function renderGrid(gid, items) {
     });
     loaded += batch.length;
     if (loaded < items.length) {
-      // 添加底部 loading 动画
       const spinner = document.createElement('div');
       spinner.className = 'grid-loading';
       spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
       g.appendChild(spinner);
-    } else if (observer) {
-      observer.disconnect();
     }
+    loading = false;
   }
 
   renderBatch();
 
   if (loaded < items.length) {
-    const sentinel = document.createElement('div');
-    sentinel.className = 'grid-sentinel';
-    sentinel.style.height = '1px';
-    g.appendChild(sentinel);
-    const scrollRoot = document.querySelector('.content');
-    observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && loaded < items.length) {
+    const scrollEl = document.querySelector('.content');
+    scrollEl.addEventListener('scroll', function onScroll() {
+      if (loaded >= items.length) {
+        scrollEl.removeEventListener('scroll', onScroll);
+        return;
+      }
+      if (!loading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
         renderBatch();
       }
-    }, { root: scrollRoot, rootMargin: '200px' });
-    observer.observe(sentinel);
+    });
   }
 }
 
@@ -314,17 +312,16 @@ function loadHistory() {
 
   // 滚动到底部时加载更多
   if (loaded < list.length) {
-    const sentinel = document.createElement('div');
-    sentinel.id = 'history-sentinel';
-    sentinel.style.height = '1px';
-    gr.appendChild(sentinel);
-    const observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && loaded < list.length) {
-        renderBatch();
-        if (loaded >= list.length) { observer.disconnect(); sentinel.remove(); }
+    const scrollEl = document.querySelector('.content');
+    scrollEl.addEventListener('scroll', function onScroll() {
+      if (loaded >= list.length) {
+        scrollEl.removeEventListener('scroll', onScroll);
+        return;
       }
-    }, { root: document.querySelector('.content') });
-    observer.observe(sentinel);
+      if (scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
+        renderBatch();
+      }
+    });
   }
 }
 
