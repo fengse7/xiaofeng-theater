@@ -40,6 +40,21 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="100dp" />
 
+    <TextView
+        android:id="@+id/cellular_warning"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="#ffffff"
+        android:textSize="13sp"
+        android:background="#CC333333"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="80dp" />
+
     <LinearLayout
         android:id="@+id/top_bar"
         android:layout_width="0dp"
@@ -81,7 +96,6 @@
         android:id="@+id/speed_indicator"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="2.0x ⏩"
         android:textColor="#ffffff"
         android:textSize="22sp"
         android:background="#44000000"
@@ -108,7 +122,6 @@
         app:layout_constraintStart_toStartOf="@id/player_view"
         app:layout_constraintEnd_toEndOf="@id/player_view" />
 
-    <!-- 进度条 -->
     <LinearLayout
         android:id="@+id/seekbar_container"
         android:layout_width="0dp"

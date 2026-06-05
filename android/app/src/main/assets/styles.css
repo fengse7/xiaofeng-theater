@@ -99,6 +99,8 @@ body {
   position: relative;
   height: 200px;
   background: linear-gradient(160deg, #1a1040 0%, #16213e 50%, #0f3460 100%);
+  background-image: url('backgroud.jpg');
+  background-size: cover; background-position: center;
   display: flex;
   align-items: flex-end;
   padding: 22px 20px;

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="net_black">#000000</color>
+    <color name="net_dark_grey">#121212</color>
+    <color name="net_red">#E50914</color>
+    <color name="net_text_main">#FFFFFF</color>
+    <color name="net_text_sub">#B3B3B3</color>
+</resources>

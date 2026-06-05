@@ -1,10 +1,13 @@
-package com.xiaofeng.theater
+﻿package com.xiaofeng.theater
 
 import android.animation.ValueAnimator
 import android.app.Dialog
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.media.AudioManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -58,11 +61,15 @@ class PlayerActivity : AppCompatActivity() {
     private var startBrightness = 0f
     private var startVolume = 0
     private var startSeekPos = 0L
-    private var gestureType = 0 // 0=none, 1=brightness, 2=volume, 3=seek
+    private var gestureType = 0
     private val hideHandler = Handler(Looper.getMainLooper())
     private val hideRunnable = Runnable { hideControls() }
     private val audioManager: AudioManager by lazy { getSystemService(AUDIO_SERVICE) as AudioManager }
     private val maxVolume by lazy { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
+
+    companion object {
+        private var cellularWarningShown = false
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -107,7 +114,6 @@ class PlayerActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: android.widget.SeekBar?) { resetAutoHide() }
         })
 
-        // 每 500ms 更新进度
         val updateRunnable = object : Runnable { override fun run() { updateSeekbar(); hideHandler.postDelayed(this, 500) } }
         hideHandler.post(updateRunnable)
 
@@ -119,7 +125,6 @@ class PlayerActivity : AppCompatActivity() {
         episodeBtn.setOnClickListener { showEpisodeDialog() }
         speedBtn.setOnClickListener { showSpeedDialog() }
 
-        // 双击暂停 + 单击显示控件 + 长按倍速
         val gestureListener = GestureListener()
         val gestureDetector = GestureDetector(this, gestureListener)
         overlay.setOnTouchListener { _, event ->
@@ -138,7 +143,7 @@ class PlayerActivity : AppCompatActivity() {
         currentEpIdx = intent.getIntExtra("epIdx", 0)
 
         if (episodeTitles.size > currentEpIdx) {
-            episodeTitle.text = "${showTitle} · ${episodeTitles[currentEpIdx]}"
+            episodeTitle.text = "${showTitle} - ${episodeTitles[currentEpIdx]}"
         }
     }
 
@@ -164,13 +169,44 @@ class PlayerActivity : AppCompatActivity() {
         if (idx < 0 || idx >= episodes.size) return
         currentEpIdx = idx
         val url = episodes[idx]
-        episodeTitle.text = "${showTitle} · ${episodeTitles.getOrElse(idx) { "第${idx+1}集" }}"
+        episodeTitle.text = "${showTitle} - ${episodeTitles.getOrElse(idx) { "第${idx+1}集" }}"
 
         val mediaItem = MediaItem.fromUri(Uri.parse(url))
         exoPlayer?.setMediaItem(mediaItem)
         exoPlayer?.prepare()
         exoPlayer?.playWhenReady = true
         updateEpisodeBtn()
+
+        checkCellularWarning()
+    }
+
+    private fun checkCellularWarning() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val active = cm.activeNetwork
+        val caps = if (active != null) cm.getNetworkCapabilities(active) else null
+
+        if (caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+            showNetworkToast("无网络连接")
+        } else if (!cellularWarningShown &&
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+            !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            cellularWarningShown = true
+            showNetworkToast("正在使用移动数据")
+        }
+    }
+
+    private fun showNetworkToast(text: String) {
+        val tv = findViewById<TextView>(R.id.cellular_warning)
+        tv.visibility = View.VISIBLE
+        tv.alpha = 1f
+        tv.text = text
+        hideHandler.removeCallbacks(toastHideRunnable)
+        hideHandler.postDelayed(toastHideRunnable, 3000)
+    }
+
+    private val toastHideRunnable = Runnable {
+        val tv = findViewById<TextView>(R.id.cellular_warning)
+        tv.animate().alpha(0f).setDuration(800).withEndAction { tv.visibility = View.GONE }.start()
     }
 
     private fun playNextEpisode() {
@@ -181,7 +217,6 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ===== 手势监听（单击/双击/长按）=====
     inner class GestureListener : GestureDetector.SimpleOnGestureListener() {
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
             toggleControls()
@@ -196,12 +231,11 @@ class PlayerActivity : AppCompatActivity() {
                 longPressSpeed = true
                 speedBeforeLongPress = currentSpeed
                 exoPlayer!!.setPlaybackSpeed(2.0f)
-                showSpeedIndicator("2.0x ⏩")
+                showSpeedIndicator("2.0x")
             }
         }
     }
 
-    // ===== 手势处理 =====
     private fun handleGestureMotion(event: MotionEvent) {
         when (event.action and MotionEvent.ACTION_MASK) {
             MotionEvent.ACTION_DOWN -> {
@@ -230,7 +264,6 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                // 恢复长按倍速
                 if (longPressSpeed) {
                     longPressSpeed = false
                     exoPlayer?.setPlaybackSpeed(speedBeforeLongPress)
@@ -279,7 +312,19 @@ class PlayerActivity : AppCompatActivity() {
         return "%02d:%02d".format(min, sec)
     }
 
-    // ===== 控制栏 =====
+    // ===== Back Key =====
+    private var episodeDialogOpen = false
+    private var currentDialog: Dialog? = null
+
+    override fun onBackPressed() {
+        if (episodeDialogOpen && currentDialog?.isShowing == true) {
+            currentDialog?.dismiss()
+            return
+        }
+        super.onBackPressed()
+    }
+
+    // ===== Controls =====
     private fun togglePlayPause() {
         val p = exoPlayer ?: return
         if (p.isPlaying) p.pause() else p.play()
@@ -323,14 +368,14 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ===== 选集弹窗 =====
+    // ===== Episode Dialog =====
     private fun showEpisodeDialog() {
         val dialog = Dialog(this, R.style.BottomSheetDialog)
         val view = layoutInflater.inflate(R.layout.dialog_episodes, null)
         val list = view.findViewById<LinearLayout>(R.id.episode_list)
         val tvTitle = view.findViewById<TextView>(R.id.dialog_title)
         view.findViewById<TextView>(R.id.dialog_close).setOnClickListener { dialog.dismiss() }
-        tvTitle.text = "$showTitle · 选集"
+        tvTitle.text = "$showTitle Episodes"
 
         episodeTitles.forEachIndexed { idx, title ->
             val btn = TextView(this).apply {
@@ -351,8 +396,11 @@ class PlayerActivity : AppCompatActivity() {
         dialog.window?.apply {
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, 1200.dp())
             setGravity(Gravity.BOTTOM)
-            setWindowAnimations(R.style.SlideUpAnimation)
+            setWindowAnimations(R.style.SlideAnimation)
         }
+        dialog.setOnDismissListener { episodeDialogOpen = false; currentDialog = null }
+        episodeDialogOpen = true
+        currentDialog = dialog
         dialog.show()
         resetAutoHide()
     }
@@ -361,7 +409,7 @@ class PlayerActivity : AppCompatActivity() {
         episodeBtn.text = "选集"
     }
 
-    // ===== 倍速 =====
+    // ===== Speed =====
     private val speedOptions = arrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
     private fun showSpeedDialog() {
@@ -373,7 +421,7 @@ class PlayerActivity : AppCompatActivity() {
         tvTitle.text = "播放速度"
 
         speedOptions.forEach { speed ->
-            val label = if (speed == 1.0f) "${speed}x 正常" else "${speed}x"
+            val label = if (speed == 1.0f) "${speed}x Normal" else "${speed}x"
             val btn = TextView(this).apply {
                 text = label
                 setPadding(32, 24, 32, 24)
@@ -383,7 +431,7 @@ class PlayerActivity : AppCompatActivity() {
                 setOnClickListener {
                     currentSpeed = speed
                     exoPlayer?.setPlaybackSpeed(speed)
-                    speedBtn.text = if (speed == 1.0f) "倍速" else "${speed}x"
+                    speedBtn.text = if (speed == 1.0f) "播放速度" else "${speed}x"
                     showSpeedIndicator("${speed}x")
                     dialog.dismiss()
                 }
@@ -395,7 +443,7 @@ class PlayerActivity : AppCompatActivity() {
         dialog.window?.apply {
             setLayout(600.dp(), ViewGroup.LayoutParams.WRAP_CONTENT)
             setGravity(Gravity.BOTTOM)
-            setWindowAnimations(R.style.SlideUpAnimation)
+            setWindowAnimations(R.style.SlideAnimation)
         }
         dialog.show()
         resetAutoHide()

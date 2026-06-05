@@ -6,9 +6,16 @@ const bridge = window.androidBridge || {};
 
 // ===== API 请求 =====
 let lastApiCall = 0;
+const apiCache = {};
+const API_CACHE_TTL = 3 * 60 * 1000; // 3 分钟
 
 async function nativeFetch(url) {
   try {
+    // 检查缓存
+    const now = Date.now();
+    if (apiCache[url] && now - apiCache[url].t < API_CACHE_TTL) {
+      return apiCache[url].data;
+    }
     if (bridge.fetchApi) {
       const text = bridge.fetchApi(url);
       if (!text) return null;
@@ -16,18 +23,24 @@ async function nativeFetch(url) {
         await new Promise(r => setTimeout(r, 2000));
         const retry = bridge.fetchApi(url);
         if (!retry || retry.includes('WAF') || retry.startsWith('<')) return null;
-        return JSON.parse(retry);
+        const data = JSON.parse(retry);
+        apiCache[url] = { data, t: now };
+        return data;
       }
-      return JSON.parse(text);
+      const data = JSON.parse(text);
+      apiCache[url] = { data, t: now };
+      return data;
     }
     const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    return await resp.json();
+    const data = await resp.json();
+    apiCache[url] = { data, t: now };
+    return data;
   } catch (e) { console.error('API:', e); return null; }
 }
 
 async function apiGet(params) {
   const now = Date.now();
-  const wait = Math.max(0, 800 - (now - lastApiCall));
+  const wait = Math.max(0, 200 - (now - lastApiCall));
   if (wait > 0) await new Promise(r => setTimeout(r, wait));
   lastApiCall = Date.now();
   if (!params.ac) params.ac = 'videolist';
@@ -52,7 +65,7 @@ function createCard(item) {
   card.innerHTML = `
     ${score ? `<div class="card-badge">${score}</div>` : ''}
     <div class="card-thumb${hasPic ? '' : ' thumb-fallback'}">
-      ${hasPic ? `<img src="${item.vod_pic}" loading="lazy" onerror="this.style.display='none';this.parentElement.classList.add('thumb-fallback')">` : ''}
+      ${hasPic ? `<img data-src="${item.vod_pic}" loading="eager" referrerpolicy="no-referrer" onerror="loadImageFallback(this)">` : ''}
       <span class="thumb-emoji">${emoji}</span>
     </div>
     <div class="card-info">
@@ -61,7 +74,24 @@ function createCard(item) {
       ${item.vod_remarks ? `<div class="card-remarks">${item.vod_remarks}</div>` : ''}
     </div>`;
   card.addEventListener('click', () => openEpisodeSelect(item.vod_id, item.vod_name, item.vod_pic));
+  // 触发图片加载
+  requestAnimationFrame(() => loadCardImage(card));
   return card;
+}
+
+function loadCardImage(card) {
+  const img = card.querySelector('img[data-src]');
+  if (!img) return;
+  const src = img.dataset.src;
+  img.removeAttribute('data-src');
+  img.src = src;
+}
+
+function loadImageFallback(img) {
+  if (img.dataset.fallbackTried) return;
+  img.dataset.fallbackTried = '1';
+  img.style.display = 'none';
+  img.parentElement.classList.add('thumb-fallback');
 }
 function getEmoji(id) { return {13:'🇨🇳',14:'🇭🇰',15:'🇰🇷',16:'🇺🇸',22:'🇯🇵',23:'🌍'}[id]||'🎬'; }
 
@@ -311,7 +341,7 @@ function loadHistory() {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.innerHTML = `
-      ${i.vodPic ? `<div class="card-thumb"><img src="${i.vodPic}" loading="lazy" onerror="this.style.display='none';this.parentElement.classList.add('thumb-fallback')"><span class="thumb-emoji">🎬</span></div>`
+      ${i.vodPic ? `<div class="card-thumb"><img data-src="${i.vodPic}" loading="eager" referrerpolicy="no-referrer" onerror="loadImageFallback(this)"><span class="thumb-emoji">🎬</span></div>`
                  : `<div class="card-thumb thumb-fallback"><span class="thumb-emoji">🎬</span></div>`}
       <div class="card-info">
         <div class="card-title">${i.vodName || '未知'}</div>
@@ -320,6 +350,7 @@ function loadHistory() {
       </div>`;
     card.addEventListener('click', () => openEpisodeSelect(i.vodId, i.vodName, i.vodPic));
     gr.appendChild(card);
+    requestAnimationFrame(() => loadCardImage(card));
   });
 }
 
