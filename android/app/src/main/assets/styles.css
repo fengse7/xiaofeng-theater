@@ -358,6 +358,14 @@ body {
   opacity: 1;
 }
 
+/* ===== 网格底部加载 ===== */
+.grid-loading {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+}
+
 /* ===== 选集页滑入 ===== */
 .ep-select-page {
   animation: slideUp 0.25s ease;

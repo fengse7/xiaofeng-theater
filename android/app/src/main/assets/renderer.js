@@ -94,6 +94,9 @@ function loadImageFallback(img) {
 }
 function getEmoji(id) { return {13:'🇨🇳',14:'🇭🇰',15:'🇰🇷',16:'🇺🇸',22:'🇯🇵',23:'🌍'}[id]||'🎬'; }
 
+// ===== 页面缓存 =====
+const pageCache = {}; // key: 'pid' or 'pid:filter', value: { items, scrollTop }
+
 function renderGrid(gid, items) {
   const g = document.getElementById(gid);
   if (!g) return;
@@ -102,15 +105,28 @@ function renderGrid(gid, items) {
 
   const PAGE_SIZE = 12;
   let loaded = 0;
+  let observer = null;
 
   function renderBatch() {
     const batch = items.slice(loaded, loaded + PAGE_SIZE);
+    // 移除旧的 loading spinner
+    const oldSpinner = g.querySelector('.grid-loading');
+    if (oldSpinner) oldSpinner.remove();
     batch.forEach((i, idx) => {
       const card = createCard(i);
       card.style.animationDelay = (idx * 40) + 'ms';
       g.appendChild(card);
     });
     loaded += batch.length;
+    if (loaded < items.length) {
+      // 添加底部 loading 动画
+      const spinner = document.createElement('div');
+      spinner.className = 'grid-loading';
+      spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
+      g.appendChild(spinner);
+    } else if (observer) {
+      observer.disconnect();
+    }
   }
 
   renderBatch();
@@ -121,10 +137,9 @@ function renderGrid(gid, items) {
     sentinel.style.height = '1px';
     g.appendChild(sentinel);
     const scrollRoot = document.querySelector('.content');
-    const observer = new IntersectionObserver(entries => {
+    observer = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting && loaded < items.length) {
         renderBatch();
-        if (loaded >= items.length) { observer.disconnect(); sentinel.remove(); }
       }
     }, { root: scrollRoot, rootMargin: '200px' });
     observer.observe(sentinel);
@@ -341,6 +356,8 @@ function doSearchFromHome() {
 }
 
 // ===== 导航 =====
+let currentPage = 'home';
+
 document.querySelectorAll('.mobile-nav-item').forEach(item => {
   item.addEventListener('click', async () => {
     document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
@@ -348,9 +365,33 @@ document.querySelectorAll('.mobile-nav-item').forEach(item => {
     const pid = item.dataset.page;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + pid).classList.add('active');
-    if (pid === 'home') await loadHome();
-    else if (['domestic', 'us', 'international'].includes(pid)) await loadCategory(pid);
-    else if (pid === 'search') loadHistory();
+
+    // 保存当前页面滚动位置
+    const scrollEl = document.querySelector('.content');
+    if (currentPage && scrollEl) {
+      pageCache[currentPage] = pageCache[currentPage] || {};
+      pageCache[currentPage].scrollTop = scrollEl.scrollTop;
+    }
+
+    // 切换到新页面
+    if (pid === 'home') {
+      if (pageCache['home']) {
+        scrollEl.scrollTop = pageCache['home'].scrollTop || 0;
+      } else {
+        await loadHome();
+      }
+    } else if (['domestic', 'us', 'international'].includes(pid)) {
+      const cacheKey = pid;
+      if (pageCache[cacheKey]) {
+        scrollEl.scrollTop = pageCache[cacheKey].scrollTop || 0;
+      } else {
+        await loadCategory(pid);
+        pageCache[cacheKey] = { loaded: true };
+      }
+    } else if (pid === 'search') {
+      loadHistory();
+    }
+    currentPage = pid;
   });
 });
 
@@ -364,6 +405,8 @@ document.querySelectorAll('.filter-bar').forEach(bar => {
     const page = bar.closest('.page');
     if (page) {
       const pid = page.id.replace('page-', '');
+      // 切换筛选时清除缓存，重新加载
+      delete pageCache[pid];
       const ft = t.dataset.t || '';
       if (ft) { loadCategory(pid, '', ft); }
       else { loadCategory(pid, t.dataset['class'] || ''); }
