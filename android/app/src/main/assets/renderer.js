@@ -89,8 +89,7 @@ function loadCardImage(card) {
 function loadImageFallback(img) {
   if (img.dataset.fallbackTried) return;
   img.dataset.fallbackTried = '1';
-  img.style.display = 'none';
-  img.parentElement.classList.add('thumb-fallback');
+  img.src = 'F.jpg';
 }
 function getEmoji(id) { return {13:'🇨🇳',14:'🇭🇰',15:'🇰🇷',16:'🇺🇸',22:'🇯🇵',23:'🌍'}[id]||'🎬'; }
 
@@ -107,29 +106,56 @@ function renderGrid(gid, items) {
   let loaded = 0;
   let loading = false;
 
-  function renderBatch() {
+  function renderBatch(callback) {
     loading = true;
-    // 移除旧的 loading spinner
     const oldSpinner = g.querySelector('.grid-loading');
     if (oldSpinner) oldSpinner.remove();
     const batch = items.slice(loaded, loaded + PAGE_SIZE);
+    const cards = [];
     batch.forEach((i, idx) => {
       const card = createCard(i);
       card.style.animationDelay = (idx * 40) + 'ms';
       g.appendChild(card);
+      cards.push(card);
     });
     loaded += batch.length;
-    if (loaded < items.length) {
-      const spinner = document.createElement('div');
-      spinner.className = 'grid-loading';
-      spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
-      g.appendChild(spinner);
+
+    // 等当前批次所有图片加载完成（成功或失败）再回调
+    const imgs = cards.map(c => c.querySelector('img')).filter(Boolean);
+    let pending = imgs.length;
+    if (pending === 0) {
+      if (callback) callback();
+      return;
     }
-    loading = false;
+    imgs.forEach(img => {
+      const done = () => { if (--pending === 0 && callback) callback(); };
+      if (img.complete || img.dataset.fallbackTried) { done(); }
+      else {
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+      }
+    });
   }
 
-  renderBatch();
+  function loadNext() {
+    if (loaded >= items.length) return;
+    // 先显示 spinner
+    const spinner = document.createElement('div');
+    spinner.className = 'grid-loading';
+    spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
+    g.appendChild(spinner);
+    // 渲染当前批次，图片全部加载完后移除 spinner
+    renderBatch(() => {
+      spinner.remove();
+      loading = false;
+    });
+  }
 
+  // 首批直接加载，不显示 spinner
+  loading = true;
+  renderBatch(() => { loading = false; });
+
+  // 滚动触底加载后续批次
   if (loaded < items.length) {
     const scrollEl = document.querySelector('.content');
     scrollEl.addEventListener('scroll', function onScroll() {
@@ -138,15 +164,7 @@ function renderGrid(gid, items) {
         return;
       }
       if (!loading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
-        loading = true;
-        // 先显示 spinner，等浏览器绘制完再加载下一批
-        const oldSpinner = g.querySelector('.grid-loading');
-        if (oldSpinner) oldSpinner.remove();
-        const spinner = document.createElement('div');
-        spinner.className = 'grid-loading';
-        spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
-        g.appendChild(spinner);
-        requestAnimationFrame(() => setTimeout(renderBatch, 150));
+        loadNext();
       }
     });
   }
@@ -295,8 +313,9 @@ function loadHistory() {
   const PAGE_SIZE = 12;
   let loaded = 0;
 
-  function renderBatch() {
+  function renderBatch(callback) {
     const batch = list.slice(loaded, loaded + PAGE_SIZE);
+    const cards = [];
     batch.forEach((i, idx) => {
       const card = document.createElement('div');
       card.className = 'video-card';
@@ -311,9 +330,18 @@ function loadHistory() {
         </div>`;
       card.addEventListener('click', () => openEpisodeSelect(i.vodId, i.vodName, i.vodPic));
       gr.appendChild(card);
+      cards.push(card);
       setTimeout(() => loadCardImage(card), idx * 100);
     });
     loaded += batch.length;
+    const imgs = cards.map(c => c.querySelector('img')).filter(Boolean);
+    let pending = imgs.length;
+    if (pending === 0) { if (callback) callback(); return; }
+    imgs.forEach(img => {
+      const done = () => { if (--pending === 0 && callback) callback(); };
+      if (img.complete || img.dataset.fallbackTried) { done(); }
+      else { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); }
+    });
   }
 
   renderBatch();
@@ -333,12 +361,9 @@ function loadHistory() {
         spinner.className = 'grid-loading';
         spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
         gr.appendChild(spinner);
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            spinner.remove();
-            renderBatch();
-            histLoading = false;
-          }, 150);
+        renderBatch(() => {
+          spinner.remove();
+          histLoading = false;
         });
       }
     });
