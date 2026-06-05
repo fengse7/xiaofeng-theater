@@ -157,11 +157,8 @@ function renderGrid(gid, items) {
             footer.className = 'grid-footer';
             footer.innerHTML = '找不到？<span style="color:var(--accent)">搜索见</span>';
             footer.onclick = () => {
-              document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
-              document.querySelector('.mobile-nav-item[data-page="search"]').classList.add('active');
-              document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-              document.getElementById('page-search').classList.add('active');
-              loadHistory();
+              toggleMobileSearch();
+              document.getElementById('home-search-input')?.focus();
             };
             g.appendChild(footer);
           }
