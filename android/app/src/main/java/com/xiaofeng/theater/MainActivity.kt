@@ -136,7 +136,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun registerDownloadReceiver() {
         if (!downloadReceiverRegistered) {
-            registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+            registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
             downloadReceiverRegistered = true
         }
     }
