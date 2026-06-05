@@ -106,20 +106,36 @@ function renderGrid(gid, items) {
   let loaded = 0;
   let loading = false;
 
-  function renderBatch() {
+  // 渲染一批卡片，等所有封面图片加载完后调 callback
+  function renderBatch(callback) {
     const batch = items.slice(loaded, loaded + PAGE_SIZE);
+    const cards = [];
     batch.forEach((i, idx) => {
       const card = createCard(i);
       card.style.animationDelay = (idx * 40) + 'ms';
       g.appendChild(card);
+      cards.push(card);
     });
     loaded += batch.length;
+
+    // 等封面图片全部加载完（成功或失败）
+    const imgs = cards.map(c => c.querySelector('img')).filter(Boolean);
+    if (!imgs.length) { if (callback) callback(); return; }
+    let pending = imgs.length;
+    const checkDone = () => { if (--pending <= 0 && callback) callback(); };
+    imgs.forEach(img => {
+      if (img.complete) { checkDone(); }
+      else {
+        img.addEventListener('load', checkDone, { once: true });
+        img.addEventListener('error', checkDone, { once: true });
+      }
+    });
   }
 
-  // 首批直接渲染
+  // 首批直接渲染，不显示 spinner
   renderBatch();
 
-  // 滚动触底 → 显示 spinner → 渲染下一批 → 隐藏 spinner
+  // 滚动触底 → spinner → 渲染下一批 → 图片全部加载完 → spinner 消失
   if (loaded < items.length) {
     const scrollEl = document.querySelector('.content');
     scrollEl.addEventListener('scroll', function onScroll() {
@@ -127,15 +143,13 @@ function renderGrid(gid, items) {
         scrollEl.removeEventListener('scroll', onScroll);
         return;
       }
-      if (!loading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
+      if (!loading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 300) {
         loading = true;
         const spinner = document.createElement('div');
         spinner.className = 'grid-loading';
         spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
         g.appendChild(spinner);
-        // 延迟一帧让 spinner 显示出来，再渲染下一批
-        requestAnimationFrame(() => {
-          renderBatch();
+        renderBatch(() => {
           spinner.remove();
           loading = false;
         });
@@ -287,8 +301,9 @@ function loadHistory() {
   const PAGE_SIZE = 12;
   let loaded = 0;
 
-  function renderBatch() {
+  function renderBatch(callback) {
     const batch = list.slice(loaded, loaded + PAGE_SIZE);
+    const cards = [];
     batch.forEach((i, idx) => {
       const card = document.createElement('div');
       card.className = 'video-card';
@@ -303,9 +318,18 @@ function loadHistory() {
         </div>`;
       card.addEventListener('click', () => openEpisodeSelect(i.vodId, i.vodName, i.vodPic));
       gr.appendChild(card);
+      cards.push(card);
       setTimeout(() => loadCardImage(card), idx * 100);
     });
     loaded += batch.length;
+    const imgs = cards.map(c => c.querySelector('img')).filter(Boolean);
+    if (!imgs.length) { if (callback) callback(); return; }
+    let pending = imgs.length;
+    const checkDone = () => { if (--pending <= 0 && callback) callback(); };
+    imgs.forEach(img => {
+      if (img.complete) { checkDone(); }
+      else { img.addEventListener('load', checkDone, { once: true }); img.addEventListener('error', checkDone, { once: true }); }
+    });
   }
 
   renderBatch();
@@ -318,14 +342,13 @@ function loadHistory() {
         scrollEl.removeEventListener('scroll', onScroll);
         return;
       }
-      if (!histLoading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
+      if (!histLoading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 300) {
         histLoading = true;
         const spinner = document.createElement('div');
         spinner.className = 'grid-loading';
         spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
         gr.appendChild(spinner);
-        requestAnimationFrame(() => {
-          renderBatch();
+        renderBatch(() => {
           spinner.remove();
           histLoading = false;
         });
