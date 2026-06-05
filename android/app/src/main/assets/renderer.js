@@ -106,56 +106,20 @@ function renderGrid(gid, items) {
   let loaded = 0;
   let loading = false;
 
-  function renderBatch(callback) {
-    loading = true;
-    const oldSpinner = g.querySelector('.grid-loading');
-    if (oldSpinner) oldSpinner.remove();
+  function renderBatch() {
     const batch = items.slice(loaded, loaded + PAGE_SIZE);
-    const cards = [];
     batch.forEach((i, idx) => {
       const card = createCard(i);
       card.style.animationDelay = (idx * 40) + 'ms';
       g.appendChild(card);
-      cards.push(card);
     });
     loaded += batch.length;
-
-    // 等当前批次所有图片加载完成（成功或失败）再回调
-    const imgs = cards.map(c => c.querySelector('img')).filter(Boolean);
-    let pending = imgs.length;
-    if (pending === 0) {
-      if (callback) callback();
-      return;
-    }
-    imgs.forEach(img => {
-      const done = () => { if (--pending === 0 && callback) callback(); };
-      if (img.complete || img.dataset.fallbackTried) { done(); }
-      else {
-        img.addEventListener('load', done, { once: true });
-        img.addEventListener('error', done, { once: true });
-      }
-    });
   }
 
-  function loadNext() {
-    if (loaded >= items.length) return;
-    // 先显示 spinner
-    const spinner = document.createElement('div');
-    spinner.className = 'grid-loading';
-    spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
-    g.appendChild(spinner);
-    // 渲染当前批次，图片全部加载完后移除 spinner
-    renderBatch(() => {
-      spinner.remove();
-      loading = false;
-    });
-  }
+  // 首批直接渲染
+  renderBatch();
 
-  // 首批直接加载，不显示 spinner
-  loading = true;
-  renderBatch(() => { loading = false; });
-
-  // 滚动触底加载后续批次
+  // 滚动触底 → 显示 spinner → 渲染下一批 → 隐藏 spinner
   if (loaded < items.length) {
     const scrollEl = document.querySelector('.content');
     scrollEl.addEventListener('scroll', function onScroll() {
@@ -164,7 +128,17 @@ function renderGrid(gid, items) {
         return;
       }
       if (!loading && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 400) {
-        loadNext();
+        loading = true;
+        const spinner = document.createElement('div');
+        spinner.className = 'grid-loading';
+        spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
+        g.appendChild(spinner);
+        // 延迟一帧让 spinner 显示出来，再渲染下一批
+        requestAnimationFrame(() => {
+          renderBatch();
+          spinner.remove();
+          loading = false;
+        });
       }
     });
   }
@@ -313,9 +287,8 @@ function loadHistory() {
   const PAGE_SIZE = 12;
   let loaded = 0;
 
-  function renderBatch(callback) {
+  function renderBatch() {
     const batch = list.slice(loaded, loaded + PAGE_SIZE);
-    const cards = [];
     batch.forEach((i, idx) => {
       const card = document.createElement('div');
       card.className = 'video-card';
@@ -330,23 +303,13 @@ function loadHistory() {
         </div>`;
       card.addEventListener('click', () => openEpisodeSelect(i.vodId, i.vodName, i.vodPic));
       gr.appendChild(card);
-      cards.push(card);
       setTimeout(() => loadCardImage(card), idx * 100);
     });
     loaded += batch.length;
-    const imgs = cards.map(c => c.querySelector('img')).filter(Boolean);
-    let pending = imgs.length;
-    if (pending === 0) { if (callback) callback(); return; }
-    imgs.forEach(img => {
-      const done = () => { if (--pending === 0 && callback) callback(); };
-      if (img.complete || img.dataset.fallbackTried) { done(); }
-      else { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); }
-    });
   }
 
   renderBatch();
 
-  // 滚动到底部时加载更多
   if (loaded < list.length) {
     const scrollEl = document.querySelector('.content');
     let histLoading = false;
@@ -361,7 +324,8 @@ function loadHistory() {
         spinner.className = 'grid-loading';
         spinner.innerHTML = '<div class="loading-spinner" style="width:24px;height:24px;border-width:2px"></div>';
         gr.appendChild(spinner);
-        renderBatch(() => {
+        requestAnimationFrame(() => {
+          renderBatch();
           spinner.remove();
           histLoading = false;
         });
