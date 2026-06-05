@@ -365,6 +365,14 @@ body {
   justify-content: center;
   padding: 20px 0;
 }
+.grid-footer {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 24px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
 
 /* ===== 选集页滑入 ===== */
 .ep-select-page {
