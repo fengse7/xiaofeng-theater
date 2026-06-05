@@ -65,7 +65,7 @@ function createCard(item) {
   card.innerHTML = `
     ${score ? `<div class="card-badge">${score}</div>` : ''}
     <div class="card-thumb${hasPic ? '' : ' thumb-fallback'}">
-      ${hasPic ? `<img data-src="${item.vod_pic}" loading="eager" referrerpolicy="no-referrer" onerror="loadImageFallback(this)">` : ''}
+      ${hasPic ? `<img data-src="${item.vod_pic}" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="loadImageFallback(this)">` : ''}
       <span class="thumb-emoji">${emoji}</span>
     </div>
     <div class="card-info">
@@ -74,7 +74,6 @@ function createCard(item) {
       ${item.vod_remarks ? `<div class="card-remarks">${item.vod_remarks}</div>` : ''}
     </div>`;
   card.addEventListener('click', () => openEpisodeSelect(item.vod_id, item.vod_name, item.vod_pic));
-  // 触发图片加载
   requestAnimationFrame(() => loadCardImage(card));
   return card;
 }
@@ -245,7 +244,7 @@ function loadHistory() {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.innerHTML = `
-      ${i.vodPic ? `<div class="card-thumb"><img data-src="${i.vodPic}" loading="eager" referrerpolicy="no-referrer" onerror="loadImageFallback(this)"><span class="thumb-emoji">🎬</span></div>`
+      ${i.vodPic ? `<div class="card-thumb"><img data-src="${i.vodPic}" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="loadImageFallback(this)"><span class="thumb-emoji">🎬</span></div>`
                  : `<div class="card-thumb thumb-fallback"><span class="thumb-emoji">🎬</span></div>`}
       <div class="card-info">
         <div class="card-title">${i.vodName || '未知'}</div>
@@ -331,4 +330,8 @@ function toggleMobileSearch() {
 
 // ===== 启动 =====
 console.log('💨 小风剧场 v1.2 已启动！ +0ms');
-loadHome().then(() => console.log('loadHome done +' + (performance.now()|0) + 'ms'));
+loadHome().then(() => {
+  console.log('loadHome done +' + (performance.now()|0) + 'ms');
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) { overlay.classList.add('hide'); setTimeout(() => overlay.remove(), 300); }
+});

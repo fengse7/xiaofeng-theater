@@ -152,7 +152,6 @@ body {
   border-radius: var(--radius);
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.2s;
   position: relative;
   border: 1px solid rgba(255,255,255,0.04);
 }
@@ -311,3 +310,59 @@ body {
 }
 .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
 .empty-state small { font-size: 12px; opacity: 0.6; }
+
+/* ===== 加载动画 ===== */
+.loading-overlay {
+  position: fixed; inset: 0; z-index: 5000;
+  background: var(--bg-primary);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px;
+  transition: opacity 0.3s;
+}
+.loading-overlay.hide { opacity: 0; pointer-events: none; }
+.loading-spinner {
+  width: 36px; height: 36px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: var(--text-secondary); font-size: 13px; }
+
+/* ===== 卡片出场动画 ===== */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.video-card {
+  animation: cardIn 0.3s ease both;
+}
+
+/* ===== 页面切换过渡 ===== */
+.page.active {
+  animation: pageFadeIn 0.2s ease;
+}
+@keyframes pageFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ===== 图片加载过渡 ===== */
+.card-thumb img {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.card-thumb img.loaded {
+  opacity: 1;
+}
+
+/* ===== 选集页滑入 ===== */
+.ep-select-page {
+  animation: slideUp 0.25s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
